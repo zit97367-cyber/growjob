@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum AtsType {
+  UNKNOWN
+  GREENHOUSE
+  LEVER
+  ASHBY
+  SMARTRECRUITERS
+}
+
+enum VerificationTier {
+  UNVERIFIED
+  DOMAIN_VERIFIED
+  SOURCE_VERIFIED
+}
+
+enum JobActionType {
+  SAVE
+  HIDE
+  APPLY
+}
+
+enum EventType {
+  job_view
+  save
+  hide
+  apply_attempt
+  apply_success
+  paywall_view
+  premium_upgrade
+  ats_scan
+}
+
+enum CreditReason {
+  PROFILE_COMPLETE
+  RESUME_UPLOAD
+  ATS_SCAN
+  FEEDBACK
+  TOKEN_REDEEM
+}
+
+model User {
+  id               String            @id @default(cuid())
+  name             String?
+  email            String?           @unique
+  emailVerified    DateTime?
+  image            String?
+  role             UserRole          @default(USER)
+  isPremium        Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  accounts         Account[]
+  sessions         Session[]
+  profile          UserProfile?
+  actions          UserJobAction[]
+  quotas           ApplyQuotaWeek[]
+  events           EventLog[]
+  credits          CreditLedger[]
+  resumes          Resume[]
+  atsScans         AtsScan[]
+}
+
+model UserProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  preferredRoles    String[]
+  salaryMin         Int?
+  salaryMax         Int?
+  preferredLocation String?
+  remoteOnly        Boolean  @default(false)
+  skills            String[]
+  interests         String[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Company {
+  id            String   @id @default(cuid())
+  name          String
+  websiteDomain String   @unique
+  careersUrl    String
+  atsType       AtsType  @default(UNKNOWN)
+  atsConfig     Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  jobs          Job[]
+
+  @@index([atsType])
+}
+
+model Job {
+  id               String           @id @default(cuid())
+  companyId        String
+  title            String
+  location         String?
+  isRemote         Boolean          @default(false)
+  description      String?
+  applyUrl         String
+  sourceJobId      String?
+  sourcePayload    Json?
+  publishedAt      DateTime?
+  firstSeenAt      DateTime         @default(now())
+  verificationTier VerificationTier @default(UNVERIFIED)
+  matchScoreSeed   Int              @default(0)
+  dedupeKey        String           @unique
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actions          UserJobAction[]
+  scans            AtsScan[]
+
+  @@index([companyId])
+  @@index([publishedAt])
+  @@index([firstSeenAt])
+}
+
+model UserJobAction {
+  id         String        @id @default(cuid())
+  userId     String
+  jobId      String
+  actionType JobActionType
+  createdAt  DateTime      @default(now())
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job        Job           @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobId, actionType])
+  @@index([userId, actionType])
+}
+
+model ApplyQuotaWeek {
+  id                String   @id @default(cuid())
+  userId            String
+  weekStartUtc      DateTime
+  usedTokens        Int      @default(0)
+  bonusTokensBought Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStartUtc])
+}
+
+model EventLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  eventType EventType
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+model CreditLedger {
+  id        String       @id @default(cuid())
+  userId    String
+  amount    Int
+  reason    CreditReason
+  metadata  Json?
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model Resume {
+  id         String   @id @default(cuid())
+  userId     String
+  fileName   String
+  fileType   String
+  content    String?
+  storageUrl String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scans      AtsScan[]
+}
+
+model AtsScan {
+  id               String   @id @default(cuid())
+  userId           String
+  jobId            String?
+  resumeId         String?
+  score            Int
+  improvements     String[]
+  missingKeywords  String[]
+  tailoredOutput   String?
+  createdAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job              Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  resume           Resume?  @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
