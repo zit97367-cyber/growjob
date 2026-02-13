@@ -7,120 +7,140 @@ export type FeedJob = {
   description?: string;
 };
 
-export type JobCategory = "TECH" | "NON_TECH" | "HYBRID";
+export type MainCategory =
+  | "AI"
+  | "BACKEND"
+  | "FRONT_END"
+  | "CRYPTO"
+  | "NON_TECH"
+  | "DESIGN"
+  | "MARKETING"
+  | "DATA_SCIENCE"
+  | "OTHER";
 
-const TAG_ALIASES: Record<string, string[]> = {
-  "non tech": [
-    "marketing",
-    "design",
-    "sales",
-    "customer support",
-    "community manager",
+export const MAIN_CATEGORIES: Array<{ value: MainCategory; label: string }> = [
+  { value: "AI", label: "AI" },
+  { value: "BACKEND", label: "Backend" },
+  { value: "FRONT_END", label: "Front End" },
+  { value: "CRYPTO", label: "Crypto" },
+  { value: "NON_TECH", label: "Non Tech" },
+  { value: "DESIGN", label: "Design" },
+  { value: "MARKETING", label: "Marketing" },
+  { value: "DATA_SCIENCE", label: "Data Science" },
+];
+
+const CATEGORY_KEYWORDS: Record<MainCategory, string[]> = {
+  AI: ["ai", "machine learning", "ml", "llm", "nlp", "prompt", "inference", "genai"],
+  BACKEND: ["backend", "platform", "api", "distributed", "golang", "java", "node", "python", "rust"],
+  FRONT_END: ["front end", "frontend", "react", "next.js", "web", "ui engineer"],
+  CRYPTO: ["crypto", "web3", "blockchain", "solidity", "smart contract", "defi", "evm", "protocol"],
+  NON_TECH: [
+    "operations",
+    "support",
+    "community",
+    "customer success",
     "project manager",
     "product manager",
-    "operations",
+    "people",
     "hr",
     "recruiter",
-    "content",
-    "growth",
+    "legal",
   ],
+  DESIGN: ["design", "ux", "ui", "visual", "product designer"],
+  MARKETING: ["marketing", "growth", "content", "social media", "brand", "community manager", "seo"],
+  DATA_SCIENCE: ["data scientist", "analytics", "analyst", "bi", "experimentation", "a/b", "insights"],
+  OTHER: [],
 };
 
-const TAG_KEYWORDS: Record<string, string[]> = {
-  marketing: ["marketing", "growth", "brand", "seo", "content"],
-  design: ["designer", "ux", "ui", "product design", "visual"],
-  sales: ["sales", "account executive", "business development", "partnership"],
-  "customer support": ["customer support", "support", "customer success"],
-  "community manager": ["community", "social", "discord", "ambassador"],
-  "project manager": ["project manager", "program manager", "delivery manager"],
-  "product manager": ["product manager", "product lead", "product owner"],
-  operations: ["operations", "ops", "bizops"],
-  hr: ["hr", "human resources", "people ops"],
-  recruiter: ["recruiter", "talent", "sourcing"],
-  content: ["content", "copywriter", "editor"],
-  growth: ["growth", "performance marketing", "acquisition"],
+const CATEGORY_ALIASES: Record<string, MainCategory[]> = {
+  ai: ["AI"],
+  backend: ["BACKEND"],
+  "front end": ["FRONT_END"],
+  frontend: ["FRONT_END"],
+  crypto: ["CRYPTO"],
+  "non tech": ["NON_TECH", "MARKETING", "DESIGN"],
+  design: ["DESIGN"],
+  marketing: ["MARKETING"],
+  "data science": ["DATA_SCIENCE"],
+  sales: ["NON_TECH", "MARKETING"],
+  support: ["NON_TECH"],
+  "customer support": ["NON_TECH"],
+  "community manager": ["MARKETING", "NON_TECH"],
+  "social media manager": ["MARKETING"],
 };
 
-const TECH_HINTS = [
-  "engineer",
-  "developer",
-  "solidity",
-  "backend",
-  "frontend",
-  "full stack",
-  "smart contract",
-  "devops",
-  "data scientist",
-  "security",
-  "protocol",
-];
-
-const NON_TECH_HINTS = [
-  "marketing",
-  "design",
-  "sales",
-  "support",
-  "community",
-  "product manager",
-  "operations",
-  "recruiter",
-  "people ops",
-  "content",
-  "growth",
-];
-
-function normalize(text: string) {
-  return text.trim().toLowerCase();
+export function normalizeText(value: string) {
+  return value.trim().toLowerCase();
 }
 
-function jobHaystack(job: FeedJob) {
-  return normalize(`${job.title} ${job.company} ${job.location ?? ""} ${job.matchReason} ${job.description ?? ""}`);
+function buildHaystack(job: FeedJob) {
+  return normalizeText(`${job.title} ${job.company} ${job.location ?? ""} ${job.matchReason} ${job.description ?? ""}`);
 }
 
-function expandSelectedTags(selectedTags: string[]) {
-  const normalized = selectedTags.map(normalize);
-  const expanded = new Set<string>(normalized);
+export function classifyJobCategory(job: FeedJob): MainCategory {
+  const haystack = buildHaystack(job);
+  let best: MainCategory = "OTHER";
+  let bestScore = 0;
 
-  for (const tag of normalized) {
-    for (const alias of TAG_ALIASES[tag] ?? []) {
-      expanded.add(alias);
+  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS) as Array<[MainCategory, string[]]>) {
+    if (category === "OTHER") continue;
+    const score = keywords.filter((keyword) => haystack.includes(keyword)).length;
+    if (score > bestScore) {
+      best = category;
+      bestScore = score;
+    }
+  }
+
+  if (best !== "OTHER") return best;
+
+  if (/engineer|developer|devops|architect/.test(haystack)) return "BACKEND";
+  if (/designer|ux|ui/.test(haystack)) return "DESIGN";
+  if (/marketing|growth|brand/.test(haystack)) return "MARKETING";
+  if (/product manager|project manager|operations|support/.test(haystack)) return "NON_TECH";
+
+  return "OTHER";
+}
+
+export function categoryLabel(category: MainCategory): string {
+  return MAIN_CATEGORIES.find((item) => item.value === category)?.label ?? "Other";
+}
+
+export function expandSelectedCategories(selected: string[]): MainCategory[] {
+  const expanded = new Set<MainCategory>();
+
+  for (const raw of selected) {
+    const normalized = normalizeText(raw);
+    const aliases = CATEGORY_ALIASES[normalized];
+    if (aliases) {
+      aliases.forEach((category) => expanded.add(category));
+      continue;
+    }
+
+    const exact = MAIN_CATEGORIES.find((category) => normalizeText(category.label) === normalized);
+    if (exact) {
+      expanded.add(exact.value);
     }
   }
 
   return [...expanded];
 }
 
-function matchesTag(haystack: string, tag: string) {
-  if (haystack.includes(tag)) {
-    return true;
-  }
-  const keywords = TAG_KEYWORDS[tag] ?? [];
-  return keywords.some((keyword) => haystack.includes(keyword));
-}
-
-export function classifyJobCategory(job: FeedJob): JobCategory {
-  const haystack = jobHaystack(job);
-  const tech = TECH_HINTS.some((hint) => haystack.includes(hint));
-  const nonTech = NON_TECH_HINTS.some((hint) => haystack.includes(hint));
-
-  if (tech && nonTech) return "HYBRID";
-  if (nonTech) return "NON_TECH";
-  return "TECH";
+export function matchesCategoryByContent(job: FeedJob, category: MainCategory): boolean {
+  if (category === "OTHER") return true;
+  const haystack = buildHaystack(job);
+  return CATEGORY_KEYWORDS[category].some((keyword) => haystack.includes(keyword));
 }
 
 export function filterJobsByTags<T extends FeedJob>(jobs: T[], selectedTags: string[], remoteOnly: boolean): T[] {
-  const expandedTags = expandSelectedTags(selectedTags);
+  const selectedCategories = expandSelectedCategories(selectedTags);
 
   return jobs.filter((job) => {
-    if (remoteOnly && !job.isRemote) {
-      return false;
-    }
+    if (remoteOnly && !job.isRemote) return false;
+    if (selectedCategories.length === 0) return true;
 
-    if (expandedTags.length === 0) {
-      return true;
-    }
+    const classified = classifyJobCategory(job);
+    if (selectedCategories.includes(classified)) return true;
 
-    const haystack = jobHaystack(job);
-    return expandedTags.some((tag) => matchesTag(haystack, tag));
+    return selectedCategories.some((category) => matchesCategoryByContent(job, category));
   });
 }

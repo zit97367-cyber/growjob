@@ -2,7 +2,9 @@ import { AtsType, Prisma, SourceType, VerificationTier } from "@prisma/client";
 import { subDays } from "date-fns";
 import { fetchJobsFromAts } from "@/lib/ats/connectors";
 import { NormalizedJob } from "@/lib/ats/types";
+import { classifyJobCategory } from "@/lib/jobFilters";
 import { prisma } from "@/lib/prisma";
+import { parseSalaryToUsd } from "@/lib/salary";
 import { fetchArbeitnowJobs } from "@/lib/sources/board/arbeitnow";
 import { fetchRemotiveJobs } from "@/lib/sources/board/remotive";
 import { computeVerificationTier } from "@/lib/verification";
@@ -185,6 +187,15 @@ async function upsertNormalizedJob(companyId: string, companyDomain: string, job
   });
 
   const verificationTier = computeVerificationTier(job.sourceType !== "BOARD_API", job.applyUrl, companyDomain);
+  const salary = parseSalaryToUsd(`${job.title} ${job.description ?? ""}`);
+  const jobCategory = classifyJobCategory({
+    title: job.title,
+    company: companyDomain,
+    location: job.location,
+    isRemote: job.isRemote,
+    matchReason: "",
+    description: job.description,
+  });
 
   await prisma.job.upsert({
     where: { dedupeKey },
@@ -199,6 +210,10 @@ async function upsertNormalizedJob(companyId: string, companyDomain: string, job
       sourceType: (job.sourceType ?? "ATS") as SourceType,
       sourceProvider: job.sourceProvider ?? "UNKNOWN",
       sourceReliability: job.sourceReliability ?? (job.sourceType === "BOARD_API" ? 70 : 100),
+      salaryMinUsd: salary.salaryMinUsd,
+      salaryMaxUsd: salary.salaryMaxUsd,
+      salaryInferred: salary.salaryInferred,
+      jobCategory,
       publishedAt,
       verificationTier,
       matchScoreSeed: verificationRank(verificationTier) * 10,
@@ -215,6 +230,10 @@ async function upsertNormalizedJob(companyId: string, companyDomain: string, job
       sourceType: (job.sourceType ?? "ATS") as SourceType,
       sourceProvider: job.sourceProvider ?? "UNKNOWN",
       sourceReliability: job.sourceReliability ?? (job.sourceType === "BOARD_API" ? 70 : 100),
+      salaryMinUsd: salary.salaryMinUsd,
+      salaryMaxUsd: salary.salaryMaxUsd,
+      salaryInferred: salary.salaryInferred,
+      jobCategory,
       publishedAt,
       firstSeenAt,
       verificationTier,

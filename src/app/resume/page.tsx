@@ -1,27 +1,59 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 
 type Scan = {
   score: number;
+  matchProbability?: number | null;
+  matchReason?: string | null;
   improvements: string[];
   missingKeywords: string[];
+  detailedSuggestions?: string[];
   tailoredOutput?: string | null;
 };
 
+type FeedJob = {
+  id: string;
+  title: string;
+  company: string;
+};
+
 export default function ResumePage() {
-  const [resumeId, setResumeId] = useState<string>("");
+  const [resumeId, setResumeId] = useState("");
   const [scan, setScan] = useState<Scan | null>(null);
   const [message, setMessage] = useState("");
   const [isScanning, setIsScanning] = useState(false);
+  const [jobs, setJobs] = useState<FeedJob[]>([]);
+  const [jobId, setJobId] = useState("");
 
   const score = scan?.score ?? 0;
+  const probability = scan?.matchProbability ?? 0;
 
-  const ringStyle = useMemo(() => {
+  const scoreRingStyle = useMemo(() => {
     const pct = Math.max(0, Math.min(100, score || 78));
     return { background: `conic-gradient(#7ce5c0 ${pct}%, rgba(255,255,255,0.2) ${pct}%)` };
   }, [score]);
+
+  const probabilityRingStyle = useMemo(() => {
+    const pct = Math.max(0, Math.min(100, probability));
+    return { background: `conic-gradient(#34d399 ${pct}%, rgba(255,255,255,0.2) ${pct}%)` };
+  }, [probability]);
+
+  useEffect(() => {
+    void (async () => {
+      const fromQuery = new URLSearchParams(window.location.search).get("jobId") ?? "";
+      const res = await fetch("/api/jobs/feed?salaryFloorK=10", { cache: "no-store" });
+      const data = await res.json();
+      const nextJobs: FeedJob[] = (data.jobs ?? []).slice(0, 100).map((job: FeedJob) => ({
+        id: job.id,
+        title: job.title,
+        company: job.company,
+      }));
+      setJobs(nextJobs);
+      setJobId((prev) => prev || fromQuery || nextJobs[0]?.id || "");
+    })();
+  }, []);
 
   async function upload(file: File) {
     const formData = new FormData();
@@ -41,7 +73,7 @@ export default function ResumePage() {
     const res = await fetch("/api/resume/scan", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ resumeId }),
+      body: JSON.stringify({ resumeId, jobId }),
     });
     const data = await res.json();
     setIsScanning(false);
@@ -54,19 +86,35 @@ export default function ResumePage() {
   }
 
   return (
-    <AppShell title="ATS Resume Score" subtitle="AI-like scanner and fix board" badge="Scan Lab">
-      <section className="hero-card text-center animate-rise">
-        <div className="mx-auto h-44 w-44 rounded-full p-[10px]" style={ringStyle}>
-          <div className="flex h-full w-full items-center justify-center rounded-full bg-[#0b3028]">
-            <p className="text-5xl font-semibold text-white">{score || 78}</p>
+    <AppShell title="ATS Resume Score" subtitle="Resume quality + probability of match for target jobs" badge="Scan Lab">
+      <section className="hero-card animate-rise">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="text-center">
+            <div className="mx-auto h-36 w-36 rounded-full p-[10px]" style={scoreRingStyle}>
+              <div className="flex h-full w-full items-center justify-center rounded-full bg-[#0b3028]">
+                <p className="text-4xl font-semibold text-white">{score || 78}</p>
+              </div>
+            </div>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-50/90">ATS Score</p>
+          </div>
+
+          <div className="text-center">
+            <div className="mx-auto h-36 w-36 rounded-full p-[10px]" style={probabilityRingStyle}>
+              <div className="flex h-full w-full items-center justify-center rounded-full bg-[#0b3028]">
+                <p className="text-4xl font-semibold text-white">{probability}%</p>
+              </div>
+            </div>
+            <p className="mt-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-50/90">Match Probability</p>
           </div>
         </div>
-        <p className="mt-3 text-sm font-semibold uppercase tracking-[0.2em] text-emerald-50/90">ATS Resume Score</p>
-        <p className="text-xs text-emerald-100/80">Upload once, scan often, then use premium tailoring for role-specific edits.</p>
+
+        <p className="mt-3 text-center text-xs text-emerald-100/80">
+          {scan?.matchReason ?? "Select a target job and run scan to estimate acceptance probability."}
+        </p>
       </section>
 
       <section className="section-card mt-3 space-y-2 animate-rise delay-1">
-        <p className="card-title">Resume Upload</p>
+        <p className="card-title">Resume + Target Job</p>
         <input
           className="field"
           type="file"
@@ -78,16 +126,19 @@ export default function ResumePage() {
             }
           }}
         />
-        <button className="action-btn primary w-full" disabled={!resumeId || isScanning} onClick={runScan}>
-          {isScanning ? "Scanning..." : "Run ATS Scan"}
-        </button>
-      </section>
 
-      <section className="section-card mt-3 animate-rise delay-2">
-        <div className="flex gap-2">
-          <button className="action-btn w-full" onClick={() => setMessage("Credits conversion coming soon")}>Refill Tokens</button>
-          <button className="action-btn primary w-full" onClick={() => setMessage("Premium tailoring unlocked")}>Premium Upgrade</button>
-        </div>
+        <select className="field" value={jobId} onChange={(e) => setJobId(e.target.value)}>
+          <option value="">Select target job</option>
+          {jobs.map((job) => (
+            <option key={job.id} value={job.id}>
+              {job.title} · {job.company}
+            </option>
+          ))}
+        </select>
+
+        <button className="action-btn primary w-full" disabled={!resumeId || !jobId || isScanning} onClick={runScan}>
+          {isScanning ? "Scanning..." : "Run ATS + Match Scan"}
+        </button>
       </section>
 
       {message ? <p className="toast mt-3">{message}</p> : null}
@@ -95,7 +146,7 @@ export default function ResumePage() {
       {scan ? (
         <section className="mt-3 space-y-3">
           <article className="section-card animate-rise delay-2">
-            <p className="card-title">Top 5 fixes</p>
+            <p className="card-title">Top fixes</p>
             <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-[#2f5a51]">
               {scan.improvements.map((item) => (
                 <li key={item}>{item}</li>
@@ -113,10 +164,21 @@ export default function ResumePage() {
           </article>
 
           <article className="section-card animate-rise delay-4">
-            <p className="card-title">Premium Tailor Output</p>
-            <p className="mt-2 text-xs text-[#2f5a51]">
-              {scan.tailoredOutput ?? "Upgrade to generate tailored rewrite output for this job."}
-            </p>
+            <p className="card-title">Detailed suggestions (Premium)</p>
+            {scan.detailedSuggestions && scan.detailedSuggestions.length > 0 ? (
+              <div className="space-y-2">
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-[#2f5a51]">
+                  {scan.detailedSuggestions.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+                <p className="text-xs text-[#2f5a51]">
+                  {scan.tailoredOutput ?? "Tailored rewrite guidance is available for premium users."}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-[#2f5a51]">Upgrade to unlock detailed rewrite guidance and job-tailored improvements.</p>
+            )}
           </article>
         </section>
       ) : null}

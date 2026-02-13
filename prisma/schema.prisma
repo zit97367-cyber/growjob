@@ -31,6 +31,18 @@ enum SourceType {
   BOARD_API
 }
 
+enum JobCategory {
+  AI
+  BACKEND
+  FRONT_END
+  CRYPTO
+  NON_TECH
+  DESIGN
+  MARKETING
+  DATA_SCIENCE
+  OTHER
+}
+
 enum JobActionType {
   SAVE
   HIDE
@@ -115,6 +127,10 @@ model Job {
   location         String?
   isRemote         Boolean          @default(false)
   description      String?
+  salaryMinUsd     Int?
+  salaryMaxUsd     Int?
+  salaryInferred   Boolean          @default(false)
+  jobCategory      JobCategory      @default(OTHER)
   applyUrl         String
   sourceJobId      String?
   sourcePayload    Json?
@@ -136,6 +152,8 @@ model Job {
   @@index([publishedAt])
   @@index([firstSeenAt])
   @@index([sourceProvider])
+  @@index([jobCategory])
+  @@index([salaryMinUsd])
 }
 
 model IngestRun {
@@ -231,8 +249,11 @@ model AtsScan {
   jobId            String?
   resumeId         String?
   score            Int
+  matchProbability Int?
+  matchReason      String?
   improvements     String[]
   missingKeywords  String[]
+  detailedSuggestions String[]
   tailoredOutput   String?
   createdAt        DateTime @default(now())
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -1,20 +1,38 @@
-import { VerificationTier } from "@prisma/client";
+import { JobCategory, VerificationTier } from "@prisma/client";
 import { subDays } from "date-fns";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { logEvent } from "@/lib/events";
-import { classifyJobCategory } from "@/lib/jobFilters";
 import { computeMatch, sortFeed } from "@/lib/matching";
 import { prisma } from "@/lib/prisma";
+import { normalizeText } from "@/lib/jobFilters";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getAuthSession();
   const userId = session?.user?.id;
+  const searchParams = req.nextUrl.searchParams;
+
+  const category = searchParams.get("category") as JobCategory | null;
+  const q = normalizeText(searchParams.get("q") ?? "");
+  const salaryFloorK = Number(searchParams.get("salaryFloorK") ?? "10");
+  const salaryFloorUsd = Number.isFinite(salaryFloorK) ? Math.max(10, salaryFloorK) * 1000 : 10000;
+  const remoteOnly = searchParams.get("remoteOnly") === "true";
 
   const [jobs, profile, hiddenIds] = await Promise.all([
     prisma.job.findMany({
       where: {
-        OR: [{ publishedAt: { gte: subDays(new Date(), 7) } }, { firstSeenAt: { gte: subDays(new Date(), 7) } }],
+        AND: [
+          { OR: [{ publishedAt: { gte: subDays(new Date(), 7) } }, { firstSeenAt: { gte: subDays(new Date(), 7) } }] },
+          {
+            OR: [
+              { salaryMinUsd: { gte: salaryFloorUsd } },
+              { salaryMaxUsd: { gte: salaryFloorUsd } },
+              { salaryMinUsd: null },
+            ],
+          },
+        ],
+        ...(category && Object.values(JobCategory).includes(category) ? { jobCategory: category } : {}),
+        ...(remoteOnly ? { isRemote: true } : {}),
       },
       include: { company: true },
       orderBy: [{ publishedAt: "desc" }, { firstSeenAt: "desc" }],
@@ -43,16 +61,12 @@ export async function GET() {
         applyUrl: job.applyUrl,
         matchScore: match.score,
         matchReason: match.reason,
+        salaryMinUsd: job.salaryMinUsd,
+        salaryMaxUsd: job.salaryMaxUsd,
+        salaryInferred: job.salaryInferred,
         verificationTier: job.verificationTier,
         sourceReliability: job.sourceReliability,
-        category: classifyJobCategory({
-          title: job.title,
-          company: job.company.name,
-          location: job.location ?? undefined,
-          isRemote: job.isRemote,
-          matchReason: match.reason,
-          description: job.description ?? undefined,
-        }),
+        jobCategory: job.jobCategory,
         freshnessRank: Math.floor((new Date(job.publishedAt ?? job.firstSeenAt).getTime() - subDays(new Date(), 10).getTime()) / (1000 * 60 * 60)),
         verificationRank:
           job.verificationTier === VerificationTier.SOURCE_VERIFIED
@@ -61,11 +75,22 @@ export async function GET() {
               ? 2
               : 1,
       };
+    })
+    .filter((job) => {
+      if (!q) return true;
+      const haystack = normalizeText(
+        `${job.title} ${job.company} ${job.location ?? ""} ${job.description ?? ""} ${job.matchReason}`,
+      );
+      return haystack.includes(q);
     });
 
   const sorted = sortFeed(enriched);
   if (userId) {
-    await logEvent({ eventType: "job_view", userId, metadata: { jobsShown: sorted.length } });
+    await logEvent({
+      eventType: "job_view",
+      userId,
+      metadata: { jobsShown: sorted.length, category: category ?? null, salaryFloorK: salaryFloorK ?? 10, q },
+    });
   }
   return NextResponse.json({ jobs: sorted });
 }

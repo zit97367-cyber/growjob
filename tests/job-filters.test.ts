@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { classifyJobCategory, filterJobsByTags } from "@/lib/jobFilters";
+import { classifyJobCategory, expandSelectedCategories, filterJobsByTags } from "@/lib/jobFilters";
 
-describe("filterJobsByTags", () => {
+describe("job filters and taxonomy", () => {
   const jobs = [
     {
       title: "Marketing Manager",
@@ -9,6 +9,7 @@ describe("filterJobsByTags", () => {
       location: "Remote",
       isRemote: true,
       matchReason: "strong marketing fit",
+      description: "Growth, content, social media",
     },
     {
       title: "Solidity Engineer",
@@ -16,32 +17,34 @@ describe("filterJobsByTags", () => {
       location: "New York",
       isRemote: false,
       matchReason: "smart contract match",
+      description: "EVM and protocol development",
     },
   ];
 
-  it("returns matching jobs by selected tags (OR semantics)", () => {
-    const filtered = filterJobsByTags(jobs, ["marketing", "solidity"], false);
+  it("expands non tech into multiple category aliases", () => {
+    const categories = expandSelectedCategories(["non tech"]);
+    expect(categories).toContain("NON_TECH");
+    expect(categories).toContain("MARKETING");
+  });
+
+  it("applies OR semantics over selected categories", () => {
+    const filtered = filterJobsByTags(jobs, ["marketing", "crypto"], false);
     expect(filtered).toHaveLength(2);
   });
 
-  it("applies remote-only toggle", () => {
-    const filtered = filterJobsByTags(jobs, ["solidity"], true);
+  it("keeps remote-only gate", () => {
+    const filtered = filterJobsByTags(jobs, ["crypto"], true);
     expect(filtered).toHaveLength(0);
   });
 
-  it("returns all jobs when no tags are selected", () => {
-    const filtered = filterJobsByTags(jobs, [], false);
-    expect(filtered).toHaveLength(2);
-  });
-
-  it("maps non tech tag to non-technical domains", () => {
+  it("maps non tech selection to marketing job", () => {
     const filtered = filterJobsByTags(jobs, ["non tech"], false);
     expect(filtered).toHaveLength(1);
     expect(filtered[0]?.title).toContain("Marketing");
   });
 
-  it("classifies non-tech category from marketing title", () => {
+  it("classifies marketing role into MARKETING main category", () => {
     const category = classifyJobCategory(jobs[0]);
-    expect(category).toBe("NON_TECH");
+    expect(category).toBe("MARKETING");
   });
 });

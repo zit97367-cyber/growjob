@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { ApplyRing } from "@/components/apply-ring";
-import { filterJobsByTags } from "@/lib/jobFilters";
+import { MAIN_CATEGORIES } from "@/lib/jobFilters";
+import { salaryLabel } from "@/lib/salary";
 
 type Job = {
   id: string;
@@ -15,7 +16,10 @@ type Job = {
   postedAt: string;
   matchReason: string;
   verificationTier: "UNVERIFIED" | "DOMAIN_VERIFIED" | "SOURCE_VERIFIED";
-  category?: "TECH" | "NON_TECH" | "HYBRID";
+  jobCategory: "AI" | "BACKEND" | "FRONT_END" | "CRYPTO" | "NON_TECH" | "DESIGN" | "MARKETING" | "DATA_SCIENCE" | "OTHER";
+  salaryMinUsd?: number | null;
+  salaryMaxUsd?: number | null;
+  salaryInferred?: boolean;
 };
 
 type TokenState = {
@@ -25,71 +29,43 @@ type TokenState = {
   tokensLeft: number;
 };
 
-const domainTags = [
-  "ai",
-  "analyst",
-  "backend",
-  "bitcoin",
-  "blockchain",
-  "community manager",
-  "crypto",
-  "cryptography",
-  "cto",
-  "customer support",
-  "dao",
-  "data science",
-  "defi",
-  "design",
-  "developer relations",
-  "devops",
-  "economy designer",
-  "entry level",
-  "evm",
-  "front end",
-  "full stack",
-  "golang",
-  "intern",
-  "javascript",
-  "layer 2",
-  "marketing",
-  "mobile",
-  "moderator",
-  "nft",
-  "node",
-  "non tech",
-  "open source",
-  "product manager",
-  "project manager",
-  "react",
-  "research",
-  "rust",
-  "sales",
-  "smart contract",
-  "solana",
-  "solidity",
-  "web3",
-  "web3js",
-  "zero knowledge",
-];
+const CATEGORY_LABEL: Record<Job["jobCategory"], string> = {
+  AI: "AI",
+  BACKEND: "Backend",
+  FRONT_END: "Front End",
+  CRYPTO: "Crypto",
+  NON_TECH: "Non Tech",
+  DESIGN: "Design",
+  MARKETING: "Marketing",
+  DATA_SCIENCE: "Data Science",
+  OTHER: "Other",
+};
 
 export function JobsFeed() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [tokenState, setTokenState] = useState<TokenState | null>(null);
   const [message, setMessage] = useState("");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [category, setCategory] = useState<string>("");
   const [remoteOnly, setRemoteOnly] = useState(false);
-  const [salaryBand, setSalaryBand] = useState(150);
+  const [salaryFloorK, setSalaryFloorK] = useState(10);
+  const [query, setQuery] = useState("");
+  const [loadingFeed, setLoadingFeed] = useState(false);
 
   const totalTokens = useMemo(() => {
     if (!tokenState) return 7;
     return tokenState.weeklyLimit + tokenState.bonusTokensBought;
   }, [tokenState]);
 
-  const filteredJobs = useMemo(() => filterJobsByTags(jobs, selectedTags, remoteOnly), [jobs, selectedTags, remoteOnly]);
+  const refresh = useCallback(async () => {
+    setLoadingFeed(true);
+    const params = new URLSearchParams();
+    if (category) params.set("category", category);
+    if (remoteOnly) params.set("remoteOnly", "true");
+    if (query.trim()) params.set("q", query.trim());
+    params.set("salaryFloorK", String(salaryFloorK));
 
-  async function refresh() {
     const [jobsRes, tokenRes] = await Promise.all([
-      fetch("/api/jobs/feed", { cache: "no-store" }),
+      fetch(`/api/jobs/feed?${params.toString()}`, { cache: "no-store" }),
       fetch("/api/me/token-state", { cache: "no-store" }),
     ]);
 
@@ -98,19 +74,16 @@ export function JobsFeed() {
 
     setJobs(jobsJson.jobs ?? []);
     setTokenState(tokenJson.tokenState ?? null);
-  }
+    setLoadingFeed(false);
+  }, [category, query, remoteOnly, salaryFloorK]);
 
   useEffect(() => {
-    Promise.resolve().then(() => {
+    const timer = window.setTimeout(() => {
       void refresh();
-    });
-  }, []);
+    }, 180);
 
-  function toggleTag(tag: string) {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((item) => item !== tag) : [...prev, tag],
-    );
-  }
+    return () => window.clearTimeout(timer);
+  }, [refresh]);
 
   async function postAction(url: string, successMessage?: string) {
     const res = await fetch(url, { method: "POST" });
@@ -127,7 +100,7 @@ export function JobsFeed() {
   }
 
   return (
-    <AppShell title="Home Jobs Feed" subtitle="Curated multi-domain roles and deep interactions" badge="Live ATS">
+    <AppShell title="GrowJob Feed" subtitle="Focused category search with salary intelligence" badge="Live ATS + Board APIs">
       <section className="hero-card animate-rise">
         <div className="flex items-center justify-between gap-3">
           <ApplyRing used={tokenState?.usedTokens ?? 0} total={totalTokens} />
@@ -138,11 +111,7 @@ export function JobsFeed() {
             </p>
             <div className="mt-2 flex items-center gap-2">
               <label className="flex items-center gap-2 rounded-full border border-emerald-100/40 bg-emerald-50/10 px-3 py-1 text-xs font-semibold text-emerald-50">
-                <input
-                  checked={remoteOnly}
-                  onChange={(e) => setRemoteOnly(e.target.checked)}
-                  type="checkbox"
-                />
+                <input checked={remoteOnly} onChange={(e) => setRemoteOnly(e.target.checked)} type="checkbox" />
                 Remote
               </label>
               <button
@@ -160,63 +129,72 @@ export function JobsFeed() {
 
       <section className="section-card mt-3 animate-rise delay-1">
         <div className="flex items-center justify-between gap-2">
-          <p className="card-title">Tag, Location, Company</p>
+          <p className="card-title">Search jobs</p>
           <button
             className="action-btn"
             onClick={() => {
-              setSelectedTags([]);
+              setCategory("");
               setRemoteOnly(false);
+              setSalaryFloorK(10);
+              setQuery("");
             }}
           >
-            Clear Filters
+            Clear
           </button>
         </div>
-        <p className="soft-text mt-1">
-          Add marketing, sales, design, data, and engineering domains to your feed requirements.
-        </p>
-        <p className="soft-text mt-1">{filteredJobs.length} results</p>
+
+        <input
+          className="field mt-3"
+          placeholder="Search job title or company"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
 
         <div className="tag-cloud mt-3">
-          {domainTags.map((tag) => (
+          {MAIN_CATEGORIES.map((item) => (
             <button
-              key={tag}
-              className={`filter-chip ${selectedTags.includes(tag) ? "active" : ""}`}
-              onClick={() => toggleTag(tag)}
+              key={item.value}
+              className={`filter-chip ${category === item.value ? "active" : ""}`}
+              onClick={() => setCategory((prev) => (prev === item.value ? "" : item.value))}
             >
-              {tag}
+              {item.label}
             </button>
           ))}
         </div>
-      </section>
 
-      <section className="section-card mt-3 animate-rise delay-2">
-        <div className="flex items-center justify-between">
-          <p className="card-title">Salary Range</p>
-          <span className="soft-text">${salaryBand}k+</span>
-        </div>
-        <input
-          className="mt-3 w-full accent-emerald-700"
-          type="range"
-          min={80}
-          max={320}
-          step={5}
-          value={salaryBand}
-          onChange={(e) => setSalaryBand(Number(e.target.value))}
-        />
+        <details className="mt-3 rounded-xl border border-emerald-900/10 bg-white/70 p-3">
+          <summary className="cursor-pointer text-xs font-semibold text-[#22463e]">More filters</summary>
+          <div className="mt-3">
+            <div className="flex items-center justify-between">
+              <p className="card-title">Salary Floor</p>
+              <span className="soft-text">${salaryFloorK}k+</span>
+            </div>
+            <input
+              className="mt-2 w-full accent-emerald-700"
+              type="range"
+              min={10}
+              max={500}
+              step={5}
+              value={salaryFloorK}
+              onChange={(e) => setSalaryFloorK(Number(e.target.value))}
+            />
+          </div>
+        </details>
+
+        <p className="soft-text mt-2">{loadingFeed ? "Loading..." : `${jobs.length} results`}</p>
       </section>
 
       <section className="mt-3 space-y-3">
-        {filteredJobs.length === 0 ? (
+        {!loadingFeed && jobs.length === 0 ? (
           <article className="section-card animate-rise delay-3">
-            <p className="card-title">No jobs match your current filters</p>
+            <p className="card-title">No jobs match the current filters</p>
             <p className="soft-text mt-1">
-              Try clearing filters or using related tags like marketing, design, sales, customer support, product
-              manager.
+              Try lowering salary floor, clearing category, or searching by a broader title.
             </p>
           </article>
         ) : null}
 
-        {filteredJobs.slice(0, 30).map((job, index) => (
+        {jobs.slice(0, 30).map((job, index) => (
           <article key={job.id} className={`job-card animate-rise delay-${(index % 4) + 1}`}>
             <div className="flex items-start justify-between gap-2">
               <div>
@@ -237,13 +215,18 @@ export function JobsFeed() {
                     : "Unverified"}
               </span>
             </div>
-            <div className="mt-2">
-              <span className="badge-muted">{job.category ?? "TECH"}</span>
+
+            <div className="mt-2 flex flex-wrap gap-2">
+              <span className="badge-muted">{CATEGORY_LABEL[job.jobCategory] ?? "Other"}</span>
+              <span className="badge-muted">
+                {salaryLabel(job.salaryMinUsd, job.salaryMaxUsd, Boolean(job.salaryInferred))}
+              </span>
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
               <button className="action-btn" onClick={() => postAction(`/api/jobs/${job.id}/save`, "Saved")}>Save</button>
               <button className="action-btn" onClick={() => postAction(`/api/jobs/${job.id}/hide`, "Hidden")}>Hide</button>
+              <button className="action-btn" onClick={() => (window.location.href = `/resume?jobId=${job.id}`)}>Check Match %</button>
               <button
                 className="action-btn primary"
                 disabled={(tokenState?.tokensLeft ?? 0) <= 0}
