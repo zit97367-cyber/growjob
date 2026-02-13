@@ -26,6 +26,11 @@ enum VerificationTier {
   SOURCE_VERIFIED
 }
 
+enum SourceType {
+  ATS
+  BOARD_API
+}
+
 enum JobActionType {
   SAVE
   HIDE
@@ -88,15 +93,17 @@ model UserProfile {
 }
 
 model Company {
-  id            String   @id @default(cuid())
-  name          String
-  websiteDomain String   @unique
-  careersUrl    String
-  atsType       AtsType  @default(UNKNOWN)
-  atsConfig     Json?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  jobs          Job[]
+  id               String   @id @default(cuid())
+  name             String
+  websiteDomain    String   @unique
+  careersUrl       String
+  atsType          AtsType  @default(UNKNOWN)
+  atsConfig        Json?
+  isConfigVerified Boolean  @default(false)
+  lastVerifiedAt   DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  jobs             Job[]
 
   @@index([atsType])
 }
@@ -111,6 +118,9 @@ model Job {
   applyUrl         String
   sourceJobId      String?
   sourcePayload    Json?
+  sourceType       SourceType        @default(ATS)
+  sourceProvider   String            @default("UNKNOWN")
+  sourceReliability Int              @default(100)
   publishedAt      DateTime?
   firstSeenAt      DateTime         @default(now())
   verificationTier VerificationTier @default(UNVERIFIED)
@@ -125,6 +135,31 @@ model Job {
   @@index([companyId])
   @@index([publishedAt])
   @@index([firstSeenAt])
+  @@index([sourceProvider])
+}
+
+model IngestRun {
+  id                 String            @id @default(cuid())
+  companiesProcessed Int               @default(0)
+  jobsSeen           Int               @default(0)
+  jobsUpserted       Int               @default(0)
+  createdAt          DateTime          @default(now())
+  sourceRuns         IngestSourceRun[]
+}
+
+model IngestSourceRun {
+  id          String    @id @default(cuid())
+  ingestRunId String
+  sourceName  String
+  seen        Int       @default(0)
+  upserted    Int       @default(0)
+  failed      Int       @default(0)
+  durationMs  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  ingestRun   IngestRun @relation(fields: [ingestRunId], references: [id], onDelete: Cascade)
+
+  @@index([ingestRunId])
+  @@index([sourceName])
 }
 
 model UserJobAction {

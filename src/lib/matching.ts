@@ -37,10 +37,13 @@ export function computeMatch(profile: UserProfile | null, job: Job): MatchResult
   };
 }
 
-export function sortFeed<T extends { matchScore: number; freshnessRank: number; verificationRank: number }>(items: T[]) {
+export function sortFeed<T extends { matchScore: number; freshnessRank: number; verificationRank: number; sourceReliability?: number }>(items: T[]) {
   return [...items].sort((a, b) => {
     if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
     if (b.freshnessRank !== a.freshnessRank) return b.freshnessRank - a.freshnessRank;
+    if ((b.sourceReliability ?? 0) !== (a.sourceReliability ?? 0)) {
+      return (b.sourceReliability ?? 0) - (a.sourceReliability ?? 0);
+    }
     return b.verificationRank - a.verificationRank;
   });
 }

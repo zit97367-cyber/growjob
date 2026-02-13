@@ -26,7 +26,12 @@ describe("POST /api/cron/ingest", () => {
   });
 
   it("runs ingestion when secret is valid", async () => {
-    ingestAllCompanies.mockResolvedValue({ companiesProcessed: 1, jobsSeen: 2, jobsUpserted: 2 });
+    ingestAllCompanies.mockResolvedValue({
+      companiesProcessed: 1,
+      jobsSeen: 2,
+      jobsUpserted: 2,
+      sourceBreakdown: [{ sourceName: "GREENHOUSE", seen: 2, upserted: 2, failed: 0, durationMs: 20 }],
+    });
     const { POST } = await import("@/app/api/cron/ingest/route");
 
     const req = new Request("http://localhost/api/cron/ingest", {
@@ -39,6 +44,7 @@ describe("POST /api/cron/ingest", () => {
     expect(res.status).toBe(200);
     expect(body.ok).toBe(true);
     expect(body.stats.jobsSeen).toBe(2);
+    expect(body.stats.sourceBreakdown).toHaveLength(1);
   });
 
   afterAll(() => {

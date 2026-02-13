@@ -10,10 +10,26 @@ const defaultHeaders = {
 
 type LooseObj = Record<string, unknown>;
 
+const DEFAULT_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      cache: "no-store",
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const greenhouseFetcher: Fetcher = async (config) => {
   if (!config.boardToken) return [];
   const url = `https://boards-api.greenhouse.io/v1/boards/${config.boardToken}/jobs?content=true`;
-  const res = await fetch(url, { headers: defaultHeaders, cache: "no-store" });
+  const res = await fetchWithTimeout(url, { headers: defaultHeaders });
   if (!res.ok) return [];
   const data = await res.json();
   return (data.jobs ?? []).map((job: LooseObj) => ({
@@ -28,13 +44,16 @@ const greenhouseFetcher: Fetcher = async (config) => {
     publishedAt: job.updated_at ? new Date(String(job.updated_at)) : undefined,
     sourcePayload: job,
     atsType: AtsType.GREENHOUSE,
+    sourceType: "ATS",
+    sourceProvider: "GREENHOUSE",
+    sourceReliability: 100,
   }));
 };
 
 const leverFetcher: Fetcher = async (config) => {
   if (!config.handle) return [];
   const url = `https://api.lever.co/v0/postings/${config.handle}?mode=json`;
-  const res = await fetch(url, { headers: defaultHeaders, cache: "no-store" });
+  const res = await fetchWithTimeout(url, { headers: defaultHeaders });
   if (!res.ok) return [];
   const data = await res.json();
   return (data ?? []).map((job: LooseObj) => ({
@@ -49,13 +68,16 @@ const leverFetcher: Fetcher = async (config) => {
     publishedAt: job.createdAt ? new Date(String(job.createdAt)) : undefined,
     sourcePayload: job,
     atsType: AtsType.LEVER,
+    sourceType: "ATS",
+    sourceProvider: "LEVER",
+    sourceReliability: 100,
   }));
 };
 
 const ashbyFetcher: Fetcher = async (config) => {
   if (!config.orgSlug) return [];
   const url = `https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobBoardWithTeams`; 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: defaultHeaders,
     body: JSON.stringify({
@@ -63,7 +85,6 @@ const ashbyFetcher: Fetcher = async (config) => {
         "query ApiJobBoardWithTeams($organizationHostedJobsPageName:String!){jobBoardWithTeams(organizationHostedJobsPageName:$organizationHostedJobsPageName){jobPostings{id title locationId locationName isRemote descriptionHtml applyUrl publishedDate}}}",
       variables: { organizationHostedJobsPageName: config.orgSlug },
     }),
-    cache: "no-store",
   });
   if (!res.ok) return [];
   const data = await res.json();
@@ -78,13 +99,16 @@ const ashbyFetcher: Fetcher = async (config) => {
     publishedAt: job.publishedDate ? new Date(String(job.publishedDate)) : undefined,
     sourcePayload: job,
     atsType: AtsType.ASHBY,
+    sourceType: "ATS",
+    sourceProvider: "ASHBY",
+    sourceReliability: 100,
   }));
 };
 
 const smartRecruitersFetcher: Fetcher = async (config) => {
   if (!config.companyIdentifier) return [];
   const url = `https://api.smartrecruiters.com/v1/companies/${config.companyIdentifier}/postings`;
-  const res = await fetch(url, { headers: defaultHeaders, cache: "no-store" });
+  const res = await fetchWithTimeout(url, { headers: defaultHeaders });
   if (!res.ok) return [];
   const data = await res.json();
   return (data.content ?? []).map((job: LooseObj) => ({
@@ -99,6 +123,9 @@ const smartRecruitersFetcher: Fetcher = async (config) => {
     publishedAt: job.releasedDate ? new Date(String(job.releasedDate)) : undefined,
     sourcePayload: job,
     atsType: AtsType.SMARTRECRUITERS,
+    sourceType: "ATS",
+    sourceProvider: "SMARTRECRUITERS",
+    sourceReliability: 100,
   }));
 };
 

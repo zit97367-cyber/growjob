@@ -11,9 +11,11 @@ type Job = {
   company: string;
   location?: string;
   isRemote: boolean;
+  description?: string;
   postedAt: string;
   matchReason: string;
   verificationTier: "UNVERIFIED" | "DOMAIN_VERIFIED" | "SOURCE_VERIFIED";
+  category?: "TECH" | "NON_TECH" | "HYBRID";
 };
 
 type TokenState = {
@@ -74,8 +76,8 @@ export function JobsFeed() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [tokenState, setTokenState] = useState<TokenState | null>(null);
   const [message, setMessage] = useState("");
-  const [selectedTags, setSelectedTags] = useState<string[]>(["solidity", "web3"]);
-  const [remoteOnly, setRemoteOnly] = useState(true);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [remoteOnly, setRemoteOnly] = useState(false);
   const [salaryBand, setSalaryBand] = useState(150);
 
   const totalTokens = useMemo(() => {
@@ -172,6 +174,7 @@ export function JobsFeed() {
         <p className="soft-text mt-1">
           Add marketing, sales, design, data, and engineering domains to your feed requirements.
         </p>
+        <p className="soft-text mt-1">{filteredJobs.length} results</p>
 
         <div className="tag-cloud mt-3">
           {domainTags.map((tag) => (
@@ -206,7 +209,10 @@ export function JobsFeed() {
         {filteredJobs.length === 0 ? (
           <article className="section-card animate-rise delay-3">
             <p className="card-title">No jobs match your current filters</p>
-            <p className="soft-text mt-1">Try clearing filters or toggle remote to see more opportunities.</p>
+            <p className="soft-text mt-1">
+              Try clearing filters or using related tags like marketing, design, sales, customer support, product
+              manager.
+            </p>
           </article>
         ) : null}
 
@@ -230,6 +236,9 @@ export function JobsFeed() {
                     ? "Domain Verified"
                     : "Unverified"}
               </span>
+            </div>
+            <div className="mt-2">
+              <span className="badge-muted">{job.category ?? "TECH"}</span>
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">

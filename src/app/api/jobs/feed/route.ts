@@ -3,6 +3,7 @@ import { subDays } from "date-fns";
 import { NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { logEvent } from "@/lib/events";
+import { classifyJobCategory } from "@/lib/jobFilters";
 import { computeMatch, sortFeed } from "@/lib/matching";
 import { prisma } from "@/lib/prisma";
 
@@ -37,11 +38,21 @@ export async function GET() {
         company: job.company.name,
         location: job.location,
         isRemote: job.isRemote,
+        description: job.description ?? undefined,
         postedAt: job.publishedAt ?? job.firstSeenAt,
         applyUrl: job.applyUrl,
         matchScore: match.score,
         matchReason: match.reason,
         verificationTier: job.verificationTier,
+        sourceReliability: job.sourceReliability,
+        category: classifyJobCategory({
+          title: job.title,
+          company: job.company.name,
+          location: job.location ?? undefined,
+          isRemote: job.isRemote,
+          matchReason: match.reason,
+          description: job.description ?? undefined,
+        }),
         freshnessRank: Math.floor((new Date(job.publishedAt ?? job.firstSeenAt).getTime() - subDays(new Date(), 10).getTime()) / (1000 * 60 * 60)),
         verificationRank:
           job.verificationTier === VerificationTier.SOURCE_VERIFIED

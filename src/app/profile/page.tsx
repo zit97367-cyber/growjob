@@ -72,6 +72,7 @@ export default function ProfilePage() {
   const [location, setLocation] = useState("Remote");
   const [remoteOnly, setRemoteOnly] = useState(true);
   const [message, setMessage] = useState("");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   const avatarUrl = useMemo(() => {
     if (identity.image) return identity.image;
@@ -151,6 +152,26 @@ export default function ProfilePage() {
     setMessage("Profile updated. Matching improved.");
   }
 
+  async function onAvatarUpload(file: File | null) {
+    if (!file) return;
+    setUploadingAvatar(true);
+    setMessage("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/profile/avatar", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.error ?? "Avatar upload failed");
+        return;
+      }
+      setIdentity((prev) => ({ ...prev, image: data.imageUrl }));
+      setMessage("Photo uploaded.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
   return (
     <AppShell title="Profile" subtitle="Identity, credits, and career focus" badge="Wallet">
       <section className="section-card animate-rise">
@@ -170,6 +191,15 @@ export default function ProfilePage() {
               onChange={(e) => setIdentity((prev) => ({ ...prev, designation: e.target.value }))}
               placeholder="Your designation"
             />
+            <label className="action-btn mt-2 inline-flex cursor-pointer items-center">
+              {uploadingAvatar ? "Uploading..." : "Upload Photo"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => onAvatarUpload(e.target.files?.[0] ?? null)}
+              />
+            </label>
           </div>
         </div>
       </section>

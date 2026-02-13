@@ -140,6 +140,8 @@ Included unit tests:
 - Admin page/API guarded by session role (`ADMIN`) and `ADMIN_EMAILS`
 - Auth providers only enabled when relevant env vars are configured
 - Premium logic can be safely feature-flagged via `PREMIUM_FEATURE_FLAG=true`
+- Optional board ingestion sources can be enabled via `ENABLE_BOARD_APIS=true`
+- Avatar uploads require `BLOB_READ_WRITE_TOKEN` (Vercel Blob)
 
 ## Key Routes
 

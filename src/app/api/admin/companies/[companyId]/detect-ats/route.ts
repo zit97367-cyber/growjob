@@ -20,6 +20,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ co
     data: {
       atsType: detected.atsType,
       atsConfig: detected.atsConfig,
+      isConfigVerified: false,
+      lastVerifiedAt: null,
     },
   });
 

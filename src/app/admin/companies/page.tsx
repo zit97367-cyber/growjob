@@ -9,6 +9,8 @@ type Company = {
   websiteDomain: string;
   careersUrl: string;
   atsType: string;
+  isConfigVerified: boolean;
+  lastVerifiedAt?: string | null;
 };
 
 function atsBadge(atsType: string) {
@@ -24,6 +26,12 @@ export default function AdminCompaniesPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [query, setQuery] = useState("");
+  const [latestIngest, setLatestIngest] = useState<{ createdAt: string; jobsSeen: number; jobsUpserted: number } | null>(
+    null,
+  );
+  const [sourceBreakdown, setSourceBreakdown] = useState<
+    Array<{ sourceName: string; seen: number; upserted: number; failed: number }>
+  >([]);
 
   const shown = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -45,6 +53,8 @@ export default function AdminCompaniesPage() {
     }
     setError("");
     setCompanies(data.companies ?? []);
+    setLatestIngest(data.latestIngestRun ?? null);
+    setSourceBreakdown(data.latestSourceBreakdown ?? []);
   }
 
   useEffect(() => {
@@ -56,6 +66,18 @@ export default function AdminCompaniesPage() {
   async function detect(id: string) {
     const res = await fetch(`/api/admin/companies/${id}/detect-ats`, { method: "POST" });
     setMessage(res.ok ? "ATS detected" : "Detection failed");
+    await load();
+  }
+
+  async function ingestOne(id: string) {
+    const res = await fetch(`/api/admin/companies/${id}/ingest`, { method: "POST" });
+    setMessage(res.ok ? "Company ingest complete" : "Company ingest failed");
+    await load();
+  }
+
+  async function verifyAll() {
+    const res = await fetch("/api/admin/companies/verify-ats-configs", { method: "POST" });
+    setMessage(res.ok ? "Config verification complete" : "Config verification failed");
     await load();
   }
 
@@ -72,7 +94,31 @@ export default function AdminCompaniesPage() {
             <p className="text-xs uppercase tracking-[0.2em] text-emerald-100/80">Directory Health</p>
             <p className="mt-1 text-3xl font-semibold">{companies.length}</p>
             <p className="text-xs text-emerald-100/80">companies available for ingestion.</p>
+            {latestIngest ? (
+              <p className="mt-2 text-xs text-emerald-100/80">
+                Last ingest: {latestIngest.jobsUpserted}/{latestIngest.jobsSeen} upserted
+              </p>
+            ) : null}
+            <button className="action-btn mt-3 w-full" onClick={verifyAll}>
+              Verify ATS Configs
+            </button>
           </section>
+
+          {sourceBreakdown.length > 0 ? (
+            <section className="section-card mt-3 animate-rise delay-1">
+              <p className="card-title">Source Health (last run)</p>
+              <div className="mt-2 grid grid-cols-1 gap-2">
+                {sourceBreakdown.slice(0, 8).map((item) => (
+                  <div key={item.sourceName} className="flex items-center justify-between rounded-xl border border-emerald-900/10 p-2 text-xs">
+                    <span className="font-semibold text-[#1e4a40]">{item.sourceName}</span>
+                    <span className="text-[#597870]">
+                      {item.upserted}/{item.seen} upserted · {item.failed} failed
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section className="section-card mt-3 animate-rise delay-1">
             <input className="field" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search company, domain, ATS" />
@@ -90,10 +136,19 @@ export default function AdminCompaniesPage() {
                     <p className="mt-2 text-[0.64rem] text-[#76928b]">
                       <span className={atsBadge(company.atsType)}>{company.atsType}</span>
                     </p>
+                    <p className="mt-1 text-[0.64rem] text-[#76928b]">
+                      {company.isConfigVerified ? "Config verified" : "Config unverified"}
+                      {company.lastVerifiedAt ? ` · ${new Date(company.lastVerifiedAt).toLocaleDateString()}` : ""}
+                    </p>
                   </div>
-                  <button className="action-btn primary" onClick={() => detect(company.id)}>
-                    Detect ATS
-                  </button>
+                  <div className="flex flex-col gap-2">
+                    <button className="action-btn primary" onClick={() => detect(company.id)}>
+                      Detect ATS
+                    </button>
+                    <button className="action-btn" onClick={() => ingestOne(company.id)}>
+                      Run Ingest
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}

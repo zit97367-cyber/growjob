@@ -10,6 +10,9 @@ export type NormalizedJob = {
   publishedAt?: Date;
   sourcePayload: unknown;
   atsType: AtsType;
+  sourceType?: "ATS" | "BOARD_API";
+  sourceProvider?: string;
+  sourceReliability?: number;
 };
 
 export type AtsConfig = {
