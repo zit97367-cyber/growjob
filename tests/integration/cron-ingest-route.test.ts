@@ -1,15 +1,17 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
-const ingestAllCompanies = vi.fn();
-vi.mock("@/lib/ingest", () => ({ ingestAllCompanies }));
+const ingestAndCacheJobs = vi.fn();
+vi.mock("@/lib/ingest/index", () => ({ ingestAndCacheJobs }));
 
 describe("POST /api/cron/ingest", () => {
-  const originalSecret = process.env.CRON_SECRET;
+  const originalCronSecret = process.env.CRON_SECRET;
+  const originalIngestSecret = process.env.INGEST_SECRET;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.CRON_SECRET = "test-secret";
+    process.env.INGEST_SECRET = "test-secret";
+    delete process.env.CRON_SECRET;
   });
 
   it("rejects unauthorized request", async () => {
@@ -17,26 +19,30 @@ describe("POST /api/cron/ingest", () => {
 
     const req = new Request("http://localhost/api/cron/ingest", {
       method: "POST",
-      headers: { "x-cron-secret": "wrong" },
+      headers: { "x-ingest-secret": "wrong" },
     }) as unknown as NextRequest;
 
     const res = await POST(req);
     expect(res.status).toBe(401);
-    expect(ingestAllCompanies).not.toHaveBeenCalled();
+    expect(ingestAndCacheJobs).not.toHaveBeenCalled();
   });
 
   it("runs ingestion when secret is valid", async () => {
-    ingestAllCompanies.mockResolvedValue({
-      companiesProcessed: 1,
-      jobsSeen: 2,
-      jobsUpserted: 2,
-      sourceBreakdown: [{ sourceName: "GREENHOUSE", seen: 2, upserted: 2, failed: 0, durationMs: 20 }],
+    ingestAndCacheJobs.mockResolvedValue({
+      cache: { generatedAt: "2026-02-13T00:00:00.000Z", jobs: [] },
+      stats: {
+        generatedAt: "2026-02-13T00:00:00.000Z",
+        jobsSeen: 2,
+        jobsKept: 2,
+        jobsDeduped: 0,
+        sourceBreakdown: [{ source: "GREENHOUSE", seen: 2, kept: 2 }],
+      },
     });
     const { POST } = await import("@/app/api/cron/ingest/route");
 
     const req = new Request("http://localhost/api/cron/ingest", {
       method: "POST",
-      headers: { "x-cron-secret": "test-secret" },
+      headers: { "x-ingest-secret": "test-secret" },
     }) as unknown as NextRequest;
 
     const res = await POST(req);
@@ -48,6 +54,7 @@ describe("POST /api/cron/ingest", () => {
   });
 
   afterAll(() => {
-    process.env.CRON_SECRET = originalSecret;
+    process.env.CRON_SECRET = originalCronSecret;
+    process.env.INGEST_SECRET = originalIngestSecret;
   });
 });

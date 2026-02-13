@@ -10,6 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "cron": "tsx scripts/cron.ts",
+    "ingest:jobs": "tsx scripts/run-jobs-ingest.ts",
+    "companies:add": "tsx scripts/add-company.ts",
     "db:prepare": "tsx scripts/db-prepare.ts",
     "dev:with-db": "tsx scripts/dev-with-db.ts",
     "prisma:generate": "prisma generate",

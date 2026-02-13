@@ -109,6 +109,65 @@ npm run cron
 
 Runs daily at `00:05 UTC`.
 
+## Zero-Cost Jobs API (No DB)
+
+GrowJob also ships with a filesystem-cached aggregation pipeline that does not use the database schema.
+
+- Source configuration file:
+  - `/Users/zitkin/Downloads/CODEX project/growjob/data/companies.json`
+  - keys:
+    - `greenhouseBoards`: `{ name, boardToken, websiteDomain }[]`
+    - `leverCompanies`: `{ name, companySlug, websiteDomain }[]`
+- Sources:
+  - Greenhouse Board API
+  - Lever Postings API
+  - Remotive API (with source attribution kept as `sourceName` and `sourceUrl`)
+- Cache file:
+  - primary: `/Users/zitkin/Downloads/CODEX project/growjob/data/cache/jobs_cache.json`
+  - fallback on serverless: `/tmp/growjob_jobs_cache.json`
+- Freshness:
+  - ingestion keeps max 10 days
+  - API defaults to 7 days and caps at 10
+
+### API: `GET /api/jobs`
+
+Query params:
+
+- `days=7` (default 7, max 10)
+- `verifiedOnly=true|false`
+- `remoteOnly=true|false`
+- `tag=solana` (crypto tags)
+- `q=search text`
+
+### API: `POST /api/cron/ingest`
+
+Header:
+
+- `x-ingest-secret: $INGEST_SECRET` (preferred)
+- `x-cron-secret: $CRON_SECRET` (backward compatible)
+
+### Run ingestion locally
+
+```bash
+npm run ingest:jobs
+```
+
+### Add companies quickly
+
+```bash
+# Greenhouse
+npm run companies:add -- --source greenhouse --name "Acme" --domain acme.com --token acme-board
+
+# Lever
+npm run companies:add -- --source lever --name "Acme" --domain acme.com --slug acme
+```
+
+### UI helper
+
+Client helper to call unified jobs API:
+
+- `/Users/zitkin/Downloads/CODEX project/growjob/src/lib/client/jobs.ts`
+
 ## Stripe Webhook
 
 - Endpoint: `POST /api/stripe/webhook`
@@ -137,6 +196,7 @@ Included unit tests:
 ## Security Notes
 
 - Cron endpoint protected by `x-cron-secret` when `CRON_SECRET` is set
+- Zero-DB ingest endpoint protected by `INGEST_SECRET` (fallback `CRON_SECRET`)
 - Admin page/API guarded by session role (`ADMIN`) and `ADMIN_EMAILS`
 - Auth providers only enabled when relevant env vars are configured
 - Premium logic can be safely feature-flagged via `PREMIUM_FEATURE_FLAG=true`

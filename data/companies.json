@@ -1,0 +1,16 @@
+{
+  "greenhouseBoards": [
+    {
+      "name": "Example Web3 Company",
+      "boardToken": "example-company",
+      "websiteDomain": "example.com"
+    }
+  ],
+  "leverCompanies": [
+    {
+      "name": "Example Crypto Org",
+      "companySlug": "example-crypto-org",
+      "websiteDomain": "example.org"
+    }
+  ]
+}
