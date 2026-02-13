@@ -16,7 +16,7 @@ Production-oriented MVP for a Web3 jobs app built with Next.js, TypeScript, Tail
 - Save/Hide unlimited jobs regardless of apply tokens
 - Freshness rules:
   - Feed default: jobs from last 7 days
-  - Ingestion retention: only jobs within 10 days
+  - Ingestion retention: only jobs within 14 days
 - Verification tiers:
   - `SOURCE_VERIFIED` when pulled from ATS connector
   - `DOMAIN_VERIFIED` when apply domain matches company domain/known ATS domain
@@ -126,14 +126,14 @@ GrowJob also ships with a filesystem-cached aggregation pipeline that does not u
   - primary: `/Users/zitkin/Downloads/CODEX project/growjob/data/cache/jobs_cache.json`
   - fallback on serverless: `/tmp/growjob_jobs_cache.json`
 - Freshness:
-  - ingestion keeps max 10 days
+  - ingestion keeps max 14 days
   - API defaults to 7 days and caps at 10
 
 ### API: `GET /api/jobs`
 
 Query params:
 
-- `days=7` (default 7, max 10)
+- `days=7` (default 7, max 14)
 - `verifiedOnly=true|false`
 - `remoteOnly=true|false`
 - `tag=solana` (crypto tags)

@@ -52,12 +52,12 @@ describe("GET /api/jobs", () => {
     expect(body.jobs[0].verificationTier).toBe("SOURCE_VERIFIED");
   });
 
-  it("applies days cap max 10", async () => {
+  it("applies days cap max 14", async () => {
     const { GET } = await import("@/app/api/jobs/route");
     const req = new NextRequest("http://localhost/api/jobs?days=99");
     const res = await GET(req);
     const body = await res.json();
 
-    expect(body.filters.days).toBe(10);
+    expect(body.filters.days).toBe(14);
   });
 });

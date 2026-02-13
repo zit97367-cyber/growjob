@@ -48,7 +48,7 @@ export function dedupeJobs(jobs: UnifiedJob[]) {
   return [...byHash.values()];
 }
 
-export function filterByFreshness(jobs: UnifiedJob[], maxDays = 10) {
+export function filterByFreshness(jobs: UnifiedJob[], maxDays = 14) {
   const cutoff = Date.now() - maxDays * 24 * 60 * 60 * 1000;
   return jobs.filter((job) => {
     const reference = toTs(job.postedAt ?? job.firstSeenAt);

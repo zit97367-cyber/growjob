@@ -10,7 +10,7 @@ function toBool(value: string | null) {
 function toDays(value: string | null) {
   const parsed = Number(value ?? "7");
   if (!Number.isFinite(parsed)) return 7;
-  return Math.min(10, Math.max(1, parsed));
+  return Math.min(14, Math.max(1, parsed));
 }
 
 function rankVerification(tier: string) {

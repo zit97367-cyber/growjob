@@ -28,7 +28,7 @@ export async function ingestAndCacheJobs(force = false): Promise<{ cache: JobsCa
     let merged: UnifiedJob[] = normalizeAndFilter([...greenhouse, ...lever, ...remotive]);
     merged = mergeFirstSeenAt(existingCache?.jobs ?? [], merged);
 
-    const freshness = filterByFreshness(merged, 10);
+    const freshness = filterByFreshness(merged, 14);
     const deduped = dedupeJobs(freshness);
     const sorted = sortJobs(deduped);
 
