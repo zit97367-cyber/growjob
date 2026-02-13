@@ -2,59 +2,41 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { ApplyRing } from "@/components/apply-ring";
-import { MAIN_CATEGORIES } from "@/lib/jobFilters";
-import { salaryLabel } from "@/lib/salary";
-
-type Job = {
-  id: string;
-  title: string;
-  company: string;
-  location?: string;
-  isRemote: boolean;
-  description?: string;
-  postedAt: string;
-  matchReason: string;
-  verificationTier: "UNVERIFIED" | "DOMAIN_VERIFIED" | "SOURCE_VERIFIED";
-  jobCategory: "AI" | "BACKEND" | "FRONT_END" | "CRYPTO" | "NON_TECH" | "DESIGN" | "MARKETING" | "DATA_SCIENCE" | "OTHER";
-  salaryMinUsd?: number | null;
-  salaryMaxUsd?: number | null;
-  salaryInferred?: boolean;
-};
-
-type TokenState = {
-  weeklyLimit: number;
-  bonusTokensBought: number;
-  usedTokens: number;
-  tokensLeft: number;
-};
-
-const CATEGORY_LABEL: Record<Job["jobCategory"], string> = {
-  AI: "AI",
-  BACKEND: "Backend",
-  FRONT_END: "Front End",
-  CRYPTO: "Crypto",
-  NON_TECH: "Non Tech",
-  DESIGN: "Design",
-  MARKETING: "Marketing",
-  DATA_SCIENCE: "Data Science",
-  OTHER: "Other",
-};
+import { ConfirmApplyModal } from "@/components/feed/ConfirmApplyModal";
+import { FeedJob, TokenState } from "@/components/feed/types";
+import { FiltersSheet } from "@/components/feed/FiltersSheet";
+import { FocusHeader } from "@/components/feed/FocusHeader";
+import { JobCard } from "@/components/feed/JobCard";
+import { JobsToolbar } from "@/components/feed/JobsToolbar";
+import { deriveMatchReason, inferredVerification, isFreshWithinDays, timeAgo } from "@/lib/feedUi";
 
 export function JobsFeed() {
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<FeedJob[]>([]);
   const [tokenState, setTokenState] = useState<TokenState | null>(null);
   const [message, setMessage] = useState("");
-  const [category, setCategory] = useState<string>("");
+
+  const [category, setCategory] = useState("");
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [salaryFloorK, setSalaryFloorK] = useState(10);
   const [query, setQuery] = useState("");
-  const [loadingFeed, setLoadingFeed] = useState(false);
 
-  const totalTokens = useMemo(() => {
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [freshOnly, setFreshOnly] = useState(false);
+
+  const [loadingFeed, setLoadingFeed] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [confirmJob, setConfirmJob] = useState<FeedJob | null>(null);
+
+  const weeklyCap = useMemo(() => {
     if (!tokenState) return 7;
     return tokenState.weeklyLimit + tokenState.bonusTokensBought;
   }, [tokenState]);
+
+  const tokensLeft = useMemo(() => {
+    if (!tokenState) return 7;
+    if (typeof tokenState.tokensLeft === "number") return tokenState.tokensLeft;
+    return Math.max(0, weeklyCap - tokenState.usedTokens);
+  }, [tokenState, weeklyCap]);
 
   const refresh = useCallback(async () => {
     setLoadingFeed(true);
@@ -80,10 +62,28 @@ export function JobsFeed() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void refresh();
-    }, 180);
-
+    }, 140);
     return () => window.clearTimeout(timer);
   }, [refresh]);
+
+  const displayJobs = useMemo(() => {
+    return jobs.filter((job) => {
+      const verification = inferredVerification(job.applyUrl, job.verificationTier);
+      if (verifiedOnly && verification === "UNVERIFIED") return false;
+      if (freshOnly && !isFreshWithinDays(job.postedAt, 7)) return false;
+      return true;
+    });
+  }, [freshOnly, jobs, verifiedOnly]);
+
+  const updatedAgo = useMemo(() => {
+    if (displayJobs.length === 0) return "just now";
+    const latest = displayJobs
+      .map((job) => new Date(job.postedAt).getTime())
+      .sort((a, b) => b - a)[0];
+    return latest ? timeAgo(new Date(latest)) : "just now";
+  }, [displayJobs]);
+
+  const newCount = useMemo(() => displayJobs.filter((job) => isFreshWithinDays(job.postedAt, 1)).length, [displayJobs]);
 
   async function postAction(url: string, successMessage?: string) {
     const res = await fetch(url, { method: "POST" });
@@ -99,150 +99,77 @@ export function JobsFeed() {
     return data;
   }
 
+  async function confirmApplyNow() {
+    if (!confirmJob) return;
+    const data = await postAction(`/api/jobs/${confirmJob.id}/apply`, "Applied. Redirecting...");
+    setConfirmJob(null);
+    if (data?.redirectUrl) {
+      window.open(data.redirectUrl, "_blank", "noopener,noreferrer");
+    }
+  }
+
   return (
-    <AppShell title="GrowJob Feed" subtitle="Focused category search with salary intelligence" badge="Live ATS + Board APIs">
-      <section className="hero-card animate-rise">
-        <div className="flex items-center justify-between gap-3">
-          <ApplyRing used={tokenState?.usedTokens ?? 0} total={totalTokens} />
-          <div className="flex-1">
-            <p className="text-xs uppercase tracking-[0.2em] text-emerald-100/80">Remaining</p>
-            <p className="text-2xl font-semibold text-white">
-              {tokenState?.tokensLeft ?? 0}/{totalTokens}
-            </p>
-            <div className="mt-2 flex items-center gap-2">
-              <label className="flex items-center gap-2 rounded-full border border-emerald-100/40 bg-emerald-50/10 px-3 py-1 text-xs font-semibold text-emerald-50">
-                <input checked={remoteOnly} onChange={(e) => setRemoteOnly(e.target.checked)} type="checkbox" />
-                Remote
-              </label>
-              <button
-                className="rounded-full border border-emerald-100/40 bg-emerald-50/10 px-3 py-1 text-xs font-semibold text-emerald-50"
-                onClick={() => postAction("/api/stripe/create-checkout", "Premium upgraded")}
-              >
-                Premium
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
+    <AppShell title="GrowJob Feed" subtitle="Premium productivity view" badge="Live">
+      <FocusHeader remaining={tokensLeft} total={weeklyCap} onUpgrade={() => void postAction("/api/stripe/create-checkout", "Premium upgraded")} />
 
-      {message ? <p className="toast">{message}</p> : null}
+      {message ? <p className="toast mt-3">{message}</p> : null}
 
-      <section className="section-card mt-3 animate-rise delay-1">
-        <div className="flex items-center justify-between gap-2">
-          <p className="card-title">Search jobs</p>
-          <button
-            className="action-btn"
-            onClick={() => {
-              setCategory("");
-              setRemoteOnly(false);
-              setSalaryFloorK(10);
-              setQuery("");
-            }}
-          >
-            Clear
-          </button>
-        </div>
+      <JobsToolbar
+        query={query}
+        onQueryChange={setQuery}
+        remoteOnly={remoteOnly}
+        setRemoteOnly={setRemoteOnly}
+        verifiedOnly={verifiedOnly}
+        setVerifiedOnly={setVerifiedOnly}
+        freshOnly={freshOnly}
+        setFreshOnly={setFreshOnly}
+        onOpenFilters={() => setFiltersOpen(true)}
+        count={displayJobs.length}
+        updatedAgo={updatedAgo}
+        newCount={newCount}
+      />
 
-        <input
-          className="field mt-3"
-          placeholder="Search job title or company"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-
-        <div className="tag-cloud mt-3">
-          {MAIN_CATEGORIES.map((item) => (
-            <button
-              key={item.value}
-              className={`filter-chip ${category === item.value ? "active" : ""}`}
-              onClick={() => setCategory((prev) => (prev === item.value ? "" : item.value))}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-
-        <details className="mt-3 rounded-xl border border-emerald-900/10 bg-white/70 p-3">
-          <summary className="cursor-pointer text-xs font-semibold text-[#22463e]">More filters</summary>
-          <div className="mt-3">
-            <div className="flex items-center justify-between">
-              <p className="card-title">Salary Floor</p>
-              <span className="soft-text">${salaryFloorK}k+</span>
-            </div>
-            <input
-              className="mt-2 w-full accent-emerald-700"
-              type="range"
-              min={10}
-              max={500}
-              step={5}
-              value={salaryFloorK}
-              onChange={(e) => setSalaryFloorK(Number(e.target.value))}
-            />
-          </div>
-        </details>
-
-        <p className="soft-text mt-2">{loadingFeed ? "Loading..." : `${jobs.length} results`}</p>
-      </section>
+      <FiltersSheet
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        category={category}
+        setCategory={setCategory}
+        salaryFloorK={salaryFloorK}
+        setSalaryFloorK={setSalaryFloorK}
+      />
 
       <section className="mt-3 space-y-3">
-        {!loadingFeed && jobs.length === 0 ? (
+        {!loadingFeed && displayJobs.length === 0 ? (
           <article className="section-card animate-rise delay-3">
             <p className="card-title">No jobs match the current filters</p>
-            <p className="soft-text mt-1">
-              Try lowering salary floor, clearing category, or searching by a broader title.
-            </p>
+            <p className="soft-text mt-1">Try clearing filters or switching off verified/fresh chips.</p>
           </article>
         ) : null}
 
-        {jobs.slice(0, 30).map((job, index) => (
-          <article key={job.id} className={`job-card animate-rise delay-${(index % 4) + 1}`}>
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <h2 className="text-[0.94rem] font-semibold text-[#163d34]">{job.title}</h2>
-                <p className="text-[0.72rem] text-[#50756c]">
-                  {job.company} · {job.location || "Global"} {job.isRemote ? "· Remote" : ""}
-                </p>
-                <p className="mt-1 text-[0.69rem] text-[#6b8881]">{job.matchReason}</p>
-                <p className="mt-1 text-[0.64rem] uppercase tracking-wide text-[#86a49c]">
-                  {new Date(job.postedAt).toLocaleDateString()}
-                </p>
-              </div>
-              <span className="badge-verify">
-                {job.verificationTier === "SOURCE_VERIFIED"
-                  ? "Source Verified"
-                  : job.verificationTier === "DOMAIN_VERIFIED"
-                    ? "Domain Verified"
-                    : "Unverified"}
-              </span>
-            </div>
-
-            <div className="mt-2 flex flex-wrap gap-2">
-              <span className="badge-muted">{CATEGORY_LABEL[job.jobCategory] ?? "Other"}</span>
-              <span className="badge-muted">
-                {salaryLabel(job.salaryMinUsd, job.salaryMaxUsd, Boolean(job.salaryInferred))}
-              </span>
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button className="action-btn" onClick={() => postAction(`/api/jobs/${job.id}/save`, "Saved")}>Save</button>
-              <button className="action-btn" onClick={() => postAction(`/api/jobs/${job.id}/hide`, "Hidden")}>Hide</button>
-              <button className="action-btn" onClick={() => (window.location.href = `/resume?jobId=${job.id}`)}>Check Match %</button>
-              <button
-                className="action-btn primary"
-                disabled={(tokenState?.tokensLeft ?? 0) <= 0}
-                onClick={async () => {
-                  const data = await postAction(`/api/jobs/${job.id}/apply`, "Applied. Redirecting...");
-                  if (data?.redirectUrl) {
-                    window.open(data.redirectUrl, "_blank", "noopener,noreferrer");
-                  }
-                }}
-              >
-                Apply (-1 token)
-              </button>
-            </div>
-          </article>
+        {displayJobs.slice(0, 30).map((job, index) => (
+          <div key={job.id} className={`delay-${(index % 4) + 1}`}>
+            <JobCard
+              job={job}
+              whyMatch={deriveMatchReason({ job, selectedCategory: category, query, salaryFloorK })}
+              verification={inferredVerification(job.applyUrl, job.verificationTier)}
+              applyDisabled={tokensLeft <= 0}
+              onSave={() => void postAction(`/api/jobs/${job.id}/save`, "Saved")}
+              onHide={() => void postAction(`/api/jobs/${job.id}/hide`, "Hidden")}
+              onCheckMatch={() => (window.location.href = `/resume?jobId=${job.id}`)}
+              onApply={() => setConfirmJob(job)}
+              onUpgrade={() => void postAction("/api/stripe/create-checkout", "Premium upgraded")}
+            />
+          </div>
         ))}
       </section>
+
+      <ConfirmApplyModal
+        open={Boolean(confirmJob)}
+        title={confirmJob?.title ?? ""}
+        company={confirmJob?.company ?? ""}
+        onCancel={() => setConfirmJob(null)}
+        onConfirm={() => void confirmApplyNow()}
+      />
     </AppShell>
   );
 }
