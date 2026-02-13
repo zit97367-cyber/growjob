@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdminEmail } from "@/lib/security";
 
 const providers = [];
+let usingCredentialsFallback = false;
 
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   providers.push(
@@ -28,6 +29,7 @@ if (process.env.EMAIL_SERVER && process.env.EMAIL_FROM) {
 }
 
 if (providers.length === 0) {
+  usingCredentialsFallback = true;
   providers.push(
     CredentialsProvider({
       name: "Demo Login",
@@ -54,16 +56,19 @@ if (providers.length === 0) {
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "database" },
+  session: { strategy: usingCredentialsFallback ? "jwt" : "database" },
   providers,
   callbacks: {
-    async session({ session, user }) {
+    async session({ session, user, token }) {
+      const userId = user?.id ?? token?.sub;
+      if (!userId) return session;
+
       if (session.user) {
         const fullUser = await prisma.user.findUnique({
-          where: { id: user.id },
+          where: { id: userId },
           select: { isPremium: true, role: true },
         });
-        session.user.id = user.id;
+        session.user.id = userId;
         session.user.isPremium = fullUser?.isPremium ?? false;
         session.user.role = (fullUser?.role ?? UserRole.USER) as UserRole;
       }
