@@ -26,6 +26,24 @@ export type IngestStats = {
 const ATS_TIMEOUT_MS = 8000;
 const ATS_RETRIES = 2;
 
+function aggregateSourceBreakdown(rows: SourceBreakdown[]): SourceBreakdown[] {
+  const bySource = new Map<string, SourceBreakdown>();
+
+  for (const row of rows) {
+    const current = bySource.get(row.sourceName);
+    if (!current) {
+      bySource.set(row.sourceName, { ...row });
+      continue;
+    }
+    current.seen += row.seen;
+    current.upserted += row.upserted;
+    current.failed += row.failed;
+    current.durationMs += row.durationMs;
+  }
+
+  return [...bySource.values()].sort((a, b) => a.sourceName.localeCompare(b.sourceName));
+}
+
 export function buildDedupeKey(input: {
   companyId: string;
   title: string;
@@ -380,6 +398,8 @@ export async function ingestAllCompanies(): Promise<IngestStats> {
     sourceBreakdown.push(row);
   }
 
+  const aggregated = aggregateSourceBreakdown(sourceBreakdown);
+
   const run = await prisma.ingestRun.create({
     data: {
       companiesProcessed: companies.length,
@@ -389,9 +409,9 @@ export async function ingestAllCompanies(): Promise<IngestStats> {
     select: { id: true },
   });
 
-  if (sourceBreakdown.length > 0) {
+  if (aggregated.length > 0) {
     await prisma.ingestSourceRun.createMany({
-      data: sourceBreakdown.map((item) => ({
+      data: aggregated.map((item) => ({
         ingestRunId: run.id,
         sourceName: item.sourceName,
         seen: item.seen,
@@ -406,6 +426,6 @@ export async function ingestAllCompanies(): Promise<IngestStats> {
     companiesProcessed: companies.length,
     jobsSeen,
     jobsUpserted,
-    sourceBreakdown,
+    sourceBreakdown: aggregated,
   };
 }
