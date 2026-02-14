@@ -71,6 +71,7 @@ enum CreditReason {
 model User {
   id               String            @id @default(cuid())
   name             String?
+  phoneNumber      String?
   email            String?           @unique
   emailVerified    DateTime?
   image            String?
@@ -96,6 +97,7 @@ model UserProfile {
   salaryMin         Int?
   salaryMax         Int?
   preferredLocation String?
+  designation      String?
   remoteOnly        Boolean  @default(false)
   skills            String[]
   interests         String[]

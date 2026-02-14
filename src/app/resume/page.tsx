@@ -26,6 +26,7 @@ export default function ResumePage() {
   const [isScanning, setIsScanning] = useState(false);
   const [jobs, setJobs] = useState<FeedJob[]>([]);
   const [jobId, setJobId] = useState("");
+  const [stepError, setStepError] = useState("");
 
   const score = scan?.score ?? 0;
   const probability = scan?.matchProbability ?? 0;
@@ -66,9 +67,20 @@ export default function ResumePage() {
     }
     setResumeId(data.resumeId);
     setMessage("Resume uploaded");
+    setStepError("");
   }
 
   async function runScan() {
+    if (!resumeId) {
+      setStepError("Please upload a resume first.");
+      return;
+    }
+    if (!jobId) {
+      setStepError("Please select a target job.");
+      return;
+    }
+
+    setStepError("");
     setIsScanning(true);
     const res = await fetch("/api/resume/scan", {
       method: "POST",
@@ -86,9 +98,15 @@ export default function ResumePage() {
   }
 
   return (
-    <AppShell title="ATS Resume Score" subtitle="Resume quality + probability of match for target jobs" badge="Scan Lab">
+    <AppShell title="ATS Resume Score" subtitle="Free: match % and score • Premium: detailed rewrite suggestions" badge="Scan Lab">
       <section className="hero-card animate-rise">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-2 text-center text-[0.65rem] text-emerald-50/90">
+          <div className={`rounded-lg border px-2 py-1 ${resumeId ? "border-emerald-200 bg-emerald-50/20" : "border-emerald-50/20"}`}>1. Upload Resume</div>
+          <div className={`rounded-lg border px-2 py-1 ${jobId ? "border-emerald-200 bg-emerald-50/20" : "border-emerald-50/20"}`}>2. Select Job</div>
+          <div className={`rounded-lg border px-2 py-1 ${scan ? "border-emerald-200 bg-emerald-50/20" : "border-emerald-50/20"}`}>3. Run Match</div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-4">
           <div className="text-center">
             <div className="mx-auto h-36 w-36 rounded-full p-[10px]" style={scoreRingStyle}>
               <div className="flex h-full w-full items-center justify-center rounded-full bg-[#0b3028]">
@@ -109,7 +127,7 @@ export default function ResumePage() {
         </div>
 
         <p className="mt-3 text-center text-xs text-emerald-100/80">
-          {scan?.matchReason ?? "Select a target job and run scan to estimate acceptance probability."}
+          {scan?.matchReason ?? "Upload resume + select job to compute match probability."}
         </p>
       </section>
 
@@ -139,6 +157,13 @@ export default function ResumePage() {
         <button className="action-btn primary w-full" disabled={!resumeId || !jobId || isScanning} onClick={runScan}>
           {isScanning ? "Scanning..." : "Run ATS + Match Scan"}
         </button>
+
+        {stepError ? <p className="text-xs font-semibold text-red-600">{stepError}</p> : null}
+
+        <div className="rounded-lg border border-emerald-900/10 bg-emerald-50/50 p-2 text-xs text-[#2c5d52]">
+          <p><strong>Free:</strong> ATS score, match probability, and short reason.</p>
+          <p><strong>Premium:</strong> detailed suggestions and tailored rewrite output.</p>
+        </div>
       </section>
 
       {message ? <p className="toast mt-3">{message}</p> : null}

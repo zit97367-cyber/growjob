@@ -9,20 +9,46 @@ export async function GET() {
 
   await ensureInitialCredits(session.user.id);
 
-  const [profile, creditsBalance, user] = await Promise.all([
-    prisma.userProfile.findUnique({ where: { userId: session.user.id } }),
-    getCreditsBalance(session.user.id),
-    prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, image: true, email: true } }),
-  ]);
+  let profile: {
+    preferredRoles?: string[];
+    designation?: string | null;
+  } | null = null;
+  let user: {
+    name: string | null;
+    image: string | null;
+    email: string | null;
+    phoneNumber?: string | null;
+  } | null = null;
+
+  try {
+    [profile, user] = await Promise.all([
+      prisma.userProfile.findUnique({ where: { userId: session.user.id } }),
+      prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { name: true, image: true, email: true, phoneNumber: true },
+      }),
+    ]);
+  } catch {
+    [profile, user] = await Promise.all([
+      prisma.userProfile.findUnique({ where: { userId: session.user.id } }),
+      prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { name: true, image: true, email: true },
+      }),
+    ]);
+  }
+
+  const creditsBalance = await getCreditsBalance(session.user.id);
 
   return NextResponse.json({
     profile,
     creditsBalance,
     identity: {
-      name: user?.name ?? "Web3 Candidate",
+      name: user?.name ?? "",
       image: user?.image,
       email: user?.email,
-      designation: profile?.preferredRoles?.[0] ?? "Web3 Professional",
+      phoneNumber: user?.phoneNumber ?? "",
+      designation: profile?.designation ?? "",
     },
   });
 }
@@ -35,28 +61,85 @@ export async function PUT(req: NextRequest) {
 
   const body = await req.json();
 
-  const profile = await prisma.userProfile.upsert({
-    where: { userId: session.user.id },
-    update: {
-      preferredRoles: body.preferredRoles ?? [],
-      salaryMin: body.salaryMin,
-      salaryMax: body.salaryMax,
-      preferredLocation: body.preferredLocation,
-      remoteOnly: Boolean(body.remoteOnly),
-      skills: body.skills ?? [],
-      interests: body.interests ?? [],
-    },
-    create: {
-      userId: session.user.id,
-      preferredRoles: body.preferredRoles ?? [],
-      salaryMin: body.salaryMin,
-      salaryMax: body.salaryMax,
-      preferredLocation: body.preferredLocation,
-      remoteOnly: Boolean(body.remoteOnly),
-      skills: body.skills ?? [],
-      interests: body.interests ?? [],
-    },
-  });
+  const trimmedName = typeof body.name === "string" ? body.name.trim().slice(0, 120) : undefined;
+  const trimmedPhone = typeof body.phoneNumber === "string" ? body.phoneNumber.trim().slice(0, 40) : "";
+  const trimmedDesignation = typeof body.designation === "string" ? body.designation.trim().slice(0, 120) : "";
+
+  let profile:
+    | {
+        preferredRoles?: string[];
+        designation?: string | null;
+      }
+    | null = null;
+
+  try {
+    profile = await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: session.user.id },
+        data: {
+          name: trimmedName,
+          phoneNumber: trimmedPhone || null,
+        },
+      });
+
+      return tx.userProfile.upsert({
+        where: { userId: session.user.id },
+        update: {
+          preferredRoles: body.preferredRoles ?? [],
+          salaryMin: body.salaryMin,
+          salaryMax: body.salaryMax,
+          preferredLocation: body.preferredLocation,
+          designation: trimmedDesignation || null,
+          remoteOnly: Boolean(body.remoteOnly),
+          skills: body.skills ?? [],
+          interests: body.interests ?? [],
+        },
+        create: {
+          userId: session.user.id,
+          preferredRoles: body.preferredRoles ?? [],
+          salaryMin: body.salaryMin,
+          salaryMax: body.salaryMax,
+          preferredLocation: body.preferredLocation,
+          designation: trimmedDesignation || null,
+          remoteOnly: Boolean(body.remoteOnly),
+          skills: body.skills ?? [],
+          interests: body.interests ?? [],
+        },
+      });
+    });
+  } catch {
+    profile = await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: session.user.id },
+        data: {
+          name: trimmedName,
+        },
+      });
+
+      return tx.userProfile.upsert({
+        where: { userId: session.user.id },
+        update: {
+          preferredRoles: body.preferredRoles ?? [],
+          salaryMin: body.salaryMin,
+          salaryMax: body.salaryMax,
+          preferredLocation: body.preferredLocation,
+          remoteOnly: Boolean(body.remoteOnly),
+          skills: body.skills ?? [],
+          interests: body.interests ?? [],
+        },
+        create: {
+          userId: session.user.id,
+          preferredRoles: body.preferredRoles ?? [],
+          salaryMin: body.salaryMin,
+          salaryMax: body.salaryMax,
+          preferredLocation: body.preferredLocation,
+          remoteOnly: Boolean(body.remoteOnly),
+          skills: body.skills ?? [],
+          interests: body.interests ?? [],
+        },
+      });
+    });
+  }
 
   await awardCredit(session.user.id, "PROFILE_COMPLETE");
   const creditsBalance = await getCreditsBalance(session.user.id);
@@ -65,9 +148,11 @@ export async function PUT(req: NextRequest) {
     profile,
     creditsBalance,
     identity: {
-      name: session.user.name ?? "Web3 Candidate",
+      name: typeof body.name === "string" ? body.name.trim() : (session.user.name ?? ""),
       image: session.user.image,
-      designation: profile.preferredRoles?.[0] ?? "Web3 Professional",
+      email: session.user.email,
+      phoneNumber: trimmedPhone,
+      designation: profile.designation ?? "",
     },
   });
 }

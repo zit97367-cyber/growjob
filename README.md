@@ -136,6 +136,7 @@ Query params:
 - `days=7` (default 7, max 14)
 - `verifiedOnly=true|false`
 - `remoteOnly=true|false`
+- `location=berlin` (optional, additive)
 - `tag=solana` (crypto tags)
 - `q=search text`
 
@@ -161,6 +162,14 @@ npm run companies:add -- --source greenhouse --name "Acme" --domain acme.com --t
 # Lever
 npm run companies:add -- --source lever --name "Acme" --domain acme.com --slug acme
 ```
+
+### One-time admin + token reset maintenance
+
+```bash
+npm run admin:maintain -- --email "your-email@example.com"
+```
+
+This sets the user role to `ADMIN` and resets current-week `usedTokens` to `0`.
 
 ### UI helper
 

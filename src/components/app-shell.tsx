@@ -7,6 +7,7 @@ type Props = {
   title: string;
   subtitle: string;
   badge?: string;
+  statusText?: string;
   children: React.ReactNode;
 };
 
@@ -17,7 +18,7 @@ const tabs = [
   { href: "/admin/companies", label: "Admin" },
 ];
 
-export function AppShell({ title, subtitle, badge, children }: Props) {
+export function AppShell({ title, subtitle, badge, statusText, children }: Props) {
   const pathname = usePathname();
 
   return (
@@ -28,7 +29,10 @@ export function AppShell({ title, subtitle, badge, children }: Props) {
             <h1 className="shell-title">{title}</h1>
             <p className="shell-subtitle">{subtitle}</p>
           </div>
-          {badge ? <span className="ghost-chip">{badge}</span> : null}
+          <div className="flex flex-col items-end gap-1">
+            {badge ? <span className="ghost-chip">{badge}</span> : null}
+            {statusText ? <span className="ghost-chip">{statusText}</span> : null}
+          </div>
         </header>
 
         {children}

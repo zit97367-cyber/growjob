@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
 import { AppShell } from "@/components/app-shell";
 
 type Profile = {
@@ -10,17 +9,21 @@ type Profile = {
   interests: string[];
   preferredLocation?: string;
   remoteOnly?: boolean;
+  designation?: string;
 };
 
 type Identity = {
   name: string;
   image?: string;
   email?: string;
+  phoneNumber?: string;
   designation?: string;
 };
 
 const roleOptions = [
   "Solidity Developer",
+  "Backend Engineer",
+  "Frontend Engineer",
   "Product Manager",
   "Marketing Lead",
   "Community Manager",
@@ -35,6 +38,7 @@ const skillOptions = [
   "smart contract",
   "react",
   "node",
+  "typescript",
   "marketing",
   "copywriting",
   "analytics",
@@ -60,32 +64,106 @@ const interestOptions = [
   "data science",
 ];
 
+function MultiSelectDropdown(props: {
+  title: string;
+  placeholder: string;
+  options: string[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return props.options;
+    return props.options.filter((item) => item.toLowerCase().includes(q));
+  }, [props.options, query]);
+
+  return (
+    <div className="rounded-xl border border-emerald-900/10 bg-white/70 p-3">
+      <div className="flex items-center justify-between">
+        <p className="card-title">{props.title}</p>
+        <button className="action-btn" type="button" onClick={() => setOpen((prev) => !prev)}>
+          {open ? "Close" : "Select"}
+        </button>
+      </div>
+
+      {props.selected.length > 0 ? (
+        <div className="tag-cloud mt-2">
+          {props.selected.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className="filter-chip active"
+              onClick={() => props.onChange(props.selected.filter((s) => s !== item))}
+              title="Remove"
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="soft-text mt-2">{props.placeholder}</p>
+      )}
+
+      {open ? (
+        <div className="mt-3 space-y-2">
+          <input
+            className="field"
+            placeholder={`Search ${props.title.toLowerCase()}`}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <div className="max-h-40 overflow-auto rounded-lg border border-emerald-900/10 bg-white p-2">
+            {shown.map((item) => {
+              const checked = props.selected.includes(item);
+              return (
+                <label key={item} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-xs text-[#244d43] hover:bg-emerald-50/70">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => {
+                      props.onChange(checked ? props.selected.filter((s) => s !== item) : [...props.selected, item]);
+                    }}
+                  />
+                  {item}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "NA";
+  return parts.slice(0, 2).map((p) => p[0]?.toUpperCase() ?? "").join("");
+}
+
 export default function ProfilePage() {
   const [identity, setIdentity] = useState<Identity>({
-    name: "Web3 Candidate",
-    designation: "Web3 Professional",
+    name: "",
+    designation: "",
+    phoneNumber: "",
   });
   const [creditsBalance, setCreditsBalance] = useState(7);
-  const [selectedRoles, setSelectedRoles] = useState<string[]>(["Solidity Developer"]);
-  const [selectedSkills, setSelectedSkills] = useState<string[]>(["solidity", "react"]);
-  const [selectedInterests, setSelectedInterests] = useState<string[]>(["remote", "web3"]);
-  const [location, setLocation] = useState("Remote");
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+  const [location, setLocation] = useState("");
   const [remoteOnly, setRemoteOnly] = useState(true);
   const [message, setMessage] = useState("");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-
-  const avatarUrl = useMemo(() => {
-    if (identity.image) return identity.image;
-    const seed = encodeURIComponent(identity.name || "GrowJob User");
-    return `https://ui-avatars.com/api/?name=${seed}&background=0f5a49&color=ecfff8&size=128`;
-  }, [identity.image, identity.name]);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     Promise.resolve().then(async () => {
       const profileRes = await fetch("/api/profile", { cache: "no-store" });
-      if (!profileRes.ok) {
-        return;
-      }
+      if (!profileRes.ok) return;
 
       const data = (await profileRes.json()) as {
         profile: Profile | null;
@@ -96,10 +174,11 @@ export default function ProfilePage() {
       if (data.identity) {
         setIdentity((prev) => ({
           ...prev,
-          name: data.identity?.name ?? prev.name,
+          name: data.identity?.name ?? "",
           image: data.identity?.image,
           email: data.identity?.email,
-          designation: data.identity?.designation ?? prev.designation,
+          phoneNumber: data.identity?.phoneNumber ?? "",
+          designation: data.identity?.designation ?? "",
         }));
       }
 
@@ -108,29 +187,32 @@ export default function ProfilePage() {
       }
 
       if (data.profile) {
-        if (data.profile.preferredRoles.length > 0) setSelectedRoles(data.profile.preferredRoles);
-        if (data.profile.skills.length > 0) setSelectedSkills(data.profile.skills);
-        if (data.profile.interests.length > 0) setSelectedInterests(data.profile.interests);
-        if (data.profile.preferredLocation) setLocation(data.profile.preferredLocation);
+        setSelectedRoles(data.profile.preferredRoles ?? []);
+        setSelectedSkills(data.profile.skills ?? []);
+        setSelectedInterests(data.profile.interests ?? []);
+        setLocation(data.profile.preferredLocation ?? "");
         setRemoteOnly(Boolean(data.profile.remoteOnly ?? true));
+        if (data.profile.designation) {
+          setIdentity((prev) => ({ ...prev, designation: data.profile?.designation ?? "" }));
+        }
       }
     });
   }, []);
 
-  function toggleChip(value: string, current: string[], setter: (next: string[]) => void) {
-    setter(current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
-  }
-
   async function saveProfile() {
-    const designation = identity.designation?.trim();
-    const nextRoles = designation
-      ? [designation, ...selectedRoles.filter((role) => role.toLowerCase() !== designation.toLowerCase())]
+    setSaving(true);
+    const trimmedDesignation = identity.designation?.trim() ?? "";
+    const nextRoles = trimmedDesignation
+      ? [trimmedDesignation, ...selectedRoles.filter((role) => role.toLowerCase() !== trimmedDesignation.toLowerCase())]
       : selectedRoles;
 
     const res = await fetch("/api/profile", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        name: identity.name,
+        phoneNumber: identity.phoneNumber,
+        designation: trimmedDesignation,
         preferredRoles: nextRoles,
         skills: selectedSkills,
         interests: selectedInterests,
@@ -140,16 +222,19 @@ export default function ProfilePage() {
     });
 
     const data = await res.json();
+    setSaving(false);
+
     if (!res.ok) {
       setMessage(data.error ?? "Profile update failed");
       return;
     }
 
+    setSelectedRoles(nextRoles);
     if (typeof data.creditsBalance === "number") {
       setCreditsBalance(data.creditsBalance);
     }
 
-    setMessage("Profile updated. Matching improved.");
+    setMessage("Profile updated.");
   }
 
   async function onAvatarUpload(file: File | null) {
@@ -173,25 +258,56 @@ export default function ProfilePage() {
   }
 
   return (
-    <AppShell title="Profile" subtitle="Identity, credits, and career focus" badge="Wallet">
+    <AppShell title="Profile" subtitle="Premium identity dashboard" badge="Profile">
       <section className="section-card animate-rise">
-        <div className="flex items-center gap-3">
-          <Image
-            src={avatarUrl}
-            alt="User avatar"
-            width={56}
-            height={56}
-            className="h-14 w-14 rounded-full border border-emerald-900/20 object-cover"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-base font-semibold text-[#123c33]">{identity.name}</p>
-            <input
-              className="field mt-1"
-              value={identity.designation ?? ""}
-              onChange={(e) => setIdentity((prev) => ({ ...prev, designation: e.target.value }))}
-              placeholder="Your designation"
+        <div className="flex items-start gap-3">
+          {identity.image ? (
+            <img
+              src={identity.image}
+              alt="User avatar"
+              className="h-14 w-14 rounded-full border border-emerald-900/20 object-cover"
             />
-            <label className="action-btn mt-2 inline-flex cursor-pointer items-center">
+          ) : (
+            <div className="flex h-14 w-14 items-center justify-center rounded-full border border-emerald-900/20 bg-[#0f5a49] text-xl font-bold text-emerald-50">
+              {initials(identity.name || "Name")}
+            </div>
+          )}
+          <div className="min-w-0 flex-1 space-y-2">
+            <label className="text-xs font-semibold text-[#2a4e46]">Name</label>
+            <input
+              className="field"
+              value={identity.name}
+              onChange={(e) => setIdentity((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder="Enter your name here"
+            />
+
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+              <div>
+                <label className="text-xs font-semibold text-[#2a4e46]">Designation</label>
+                <input
+                  className="field mt-1"
+                  value={identity.designation ?? ""}
+                  onChange={(e) => setIdentity((prev) => ({ ...prev, designation: e.target.value }))}
+                  placeholder="e.g. Product Manager"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-[#2a4e46]">Phone Number (optional)</label>
+                <input
+                  className="field mt-1"
+                  value={identity.phoneNumber ?? ""}
+                  onChange={(e) => setIdentity((prev) => ({ ...prev, phoneNumber: e.target.value }))}
+                  placeholder="e.g. +1 555 123 4567"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-[#2a4e46]">Email ID</label>
+              <input className="field mt-1" value={identity.email ?? ""} readOnly />
+            </div>
+
+            <label className="action-btn inline-flex cursor-pointer items-center">
               {uploadingAvatar ? "Uploading..." : "Upload Photo"}
               <input
                 type="file"
@@ -207,53 +323,58 @@ export default function ProfilePage() {
       <section className="section-card mt-3 animate-rise delay-1">
         <p className="card-title">Credit Balance</p>
         <p className="mt-1 text-4xl font-semibold tracking-tight text-[#0f3d33]">{creditsBalance}</p>
-        <p className="soft-text">Starts at 7. Earn more by profile completion and ATS scans.</p>
+        <p className="soft-text">Earn credits by completing profile, uploading resume, and running ATS scans.</p>
         <button className="action-btn primary mt-3 w-full" onClick={() => setMessage("Premium flow started")}>Premium Upgrade</button>
       </section>
 
-      <section className="section-card mt-3 animate-rise delay-2">
-        <p className="card-title">Role Focus</p>
-        <div className="tag-cloud mt-3">
-          {roleOptions.map((role) => (
-            <button key={role} className={`filter-chip ${selectedRoles.includes(role) ? "active" : ""}`} onClick={() => toggleChip(role, selectedRoles, setSelectedRoles)}>
-              {role}
-            </button>
-          ))}
-        </div>
-      </section>
+      <section className="section-card mt-3 animate-rise delay-2 space-y-3">
+        <p className="card-title">Career Preferences</p>
 
-      <section className="section-card mt-3 animate-rise delay-3">
-        <p className="card-title">Skills</p>
-        <div className="tag-cloud mt-3">
-          {skillOptions.map((skill) => (
-            <button key={skill} className={`filter-chip ${selectedSkills.includes(skill) ? "active" : ""}`} onClick={() => toggleChip(skill, selectedSkills, setSelectedSkills)}>
-              {skill}
-            </button>
-          ))}
-        </div>
-      </section>
+        <MultiSelectDropdown
+          title="Role Focus"
+          placeholder="Select one or more target roles"
+          options={roleOptions}
+          selected={selectedRoles}
+          onChange={setSelectedRoles}
+        />
 
-      <section className="section-card mt-3 animate-rise delay-4">
-        <p className="card-title">Interests</p>
-        <div className="tag-cloud mt-3">
-          {interestOptions.map((interest) => (
-            <button key={interest} className={`filter-chip ${selectedInterests.includes(interest) ? "active" : ""}`} onClick={() => toggleChip(interest, selectedInterests, setSelectedInterests)}>
-              {interest}
-            </button>
-          ))}
-        </div>
+        <MultiSelectDropdown
+          title="Skills"
+          placeholder="Select your core skills"
+          options={skillOptions}
+          selected={selectedSkills}
+          onChange={setSelectedSkills}
+        />
 
-        <div className="mt-3 flex items-center gap-2">
-          <input className="field" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Preferred location" />
-          <label className="flex items-center gap-2 rounded-md border border-emerald-900/20 px-3 py-2 text-xs font-semibold text-[#1f5748]">
+        <MultiSelectDropdown
+          title="Interests"
+          placeholder="Select your interest areas"
+          options={interestOptions}
+          selected={selectedInterests}
+          onChange={setSelectedInterests}
+        />
+
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto]">
+          <div>
+            <label className="text-xs font-semibold text-[#2a4e46]">Preferred Location</label>
+            <input
+              className="field mt-1"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="e.g. Berlin, Remote, Singapore"
+            />
+          </div>
+          <label className="mt-6 flex items-center gap-2 rounded-md border border-emerald-900/20 px-3 py-2 text-xs font-semibold text-[#1f5748]">
             <input checked={remoteOnly} onChange={(e) => setRemoteOnly(e.target.checked)} type="checkbox" />
-            Remote
+            Remote only
           </label>
         </div>
       </section>
 
       <section className="section-card mt-3 animate-rise delay-2">
-        <button className="action-btn primary w-full" onClick={saveProfile}>Save Profile</button>
+        <button className="action-btn primary w-full" onClick={saveProfile} disabled={saving}>
+          {saving ? "Saving..." : "Save Profile"}
+        </button>
       </section>
 
       {message ? <p className="toast mt-3">{message}</p> : null}

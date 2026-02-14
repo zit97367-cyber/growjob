@@ -11,7 +11,7 @@ export async function GET() {
         weeklyLimit: 7,
         bonusTokensBought: 0,
         usedTokens: 0,
-        tokensLeft: 0,
+        tokensLeft: 7,
       },
       creditsBalance: 0,
       authenticated: false,

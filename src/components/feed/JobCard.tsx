@@ -10,6 +10,7 @@ type Props = {
   whyMatch: string;
   verification: VerificationStatus;
   applyDisabled: boolean;
+  showUpgradeCta: boolean;
   onSave: () => void;
   onHide: () => void;
   onCheckMatch: () => void;
@@ -23,8 +24,14 @@ function postedTone(days: number) {
   return "aged";
 }
 
-export function JobCard({ job, whyMatch, verification, applyDisabled, onSave, onHide, onCheckMatch, onApply, onUpgrade }: Props) {
+export function JobCard({ job, whyMatch, verification, applyDisabled, showUpgradeCta, onSave, onHide, onCheckMatch, onApply, onUpgrade }: Props) {
   const ageDays = daysAgo(job.postedAt);
+  let sourceHost = "Source unknown";
+  try {
+    sourceHost = new URL(job.applyUrl ?? "").hostname.replace(/^www\./, "");
+  } catch {
+    sourceHost = "Source unknown";
+  }
 
   return (
     <article className="job-card-premium animate-rise">
@@ -45,6 +52,12 @@ export function JobCard({ job, whyMatch, verification, applyDisabled, onSave, on
       </div>
 
       <p className="why-match mt-2">Why this matches you: {whyMatch}</p>
+      <div className="mt-2 flex items-center gap-2 text-[0.62rem] text-[#5f7e76]">
+        <span className="badge-muted">Source: {sourceHost}</span>
+        <span title="Verification is derived from ATS source or apply-url/company domain match.">
+          Verification details
+        </span>
+      </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button className="action-btn" onClick={onSave}>Save</button>
@@ -55,7 +68,7 @@ export function JobCard({ job, whyMatch, verification, applyDisabled, onSave, on
         </button>
       </div>
 
-      {applyDisabled ? (
+      {applyDisabled && showUpgradeCta ? (
         <button className="upgrade-inline mt-2" onClick={onUpgrade}>Upgrade for 20/week</button>
       ) : null}
     </article>

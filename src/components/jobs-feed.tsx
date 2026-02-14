@@ -14,11 +14,15 @@ export function JobsFeed() {
   const [jobs, setJobs] = useState<FeedJob[]>([]);
   const [tokenState, setTokenState] = useState<TokenState | null>(null);
   const [message, setMessage] = useState("");
+  const [authenticated, setAuthenticated] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
 
   const [category, setCategory] = useState("");
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [salaryFloorK, setSalaryFloorK] = useState(10);
   const [query, setQuery] = useState("");
+  const [locationQuery, setLocationQuery] = useState("");
+  const [locationChip, setLocationChip] = useState("");
 
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [freshOnly, setFreshOnly] = useState(false);
@@ -44,6 +48,7 @@ export function JobsFeed() {
     if (category) params.set("category", category);
     if (remoteOnly) params.set("remoteOnly", "true");
     if (query.trim()) params.set("q", query.trim());
+    if ((locationChip || locationQuery).trim()) params.set("location", (locationChip || locationQuery).trim());
     params.set("salaryFloorK", String(salaryFloorK));
 
     const [jobsRes, tokenRes] = await Promise.all([
@@ -56,8 +61,10 @@ export function JobsFeed() {
 
     setJobs(jobsJson.jobs ?? []);
     setTokenState(tokenJson.tokenState ?? null);
+    setAuthenticated(Boolean(tokenJson.authenticated));
+    setIsPremium(Boolean(tokenJson.isPremium));
     setLoadingFeed(false);
-  }, [category, query, remoteOnly, salaryFloorK]);
+  }, [category, query, remoteOnly, salaryFloorK, locationChip, locationQuery]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -85,6 +92,16 @@ export function JobsFeed() {
 
   const newCount = useMemo(() => displayJobs.filter((job) => isFreshWithinDays(job.postedAt, 1)).length, [displayJobs]);
 
+  const locationChips = useMemo(() => {
+    const common = new Set<string>(["Remote", "US", "Europe", "India", "Singapore", "Dubai"]);
+    for (const location of jobs.map((j) => j.location).filter(Boolean) as string[]) {
+      const short = location.split(",")[0]?.trim();
+      if (short && short.length <= 16) common.add(short);
+      if (common.size >= 10) break;
+    }
+    return [...common].slice(0, 10);
+  }, [jobs]);
+
   async function postAction(url: string, successMessage?: string) {
     const res = await fetch(url, { method: "POST" });
     const data = await res.json();
@@ -109,14 +126,37 @@ export function JobsFeed() {
   }
 
   return (
-    <AppShell title="GrowJob Feed" subtitle="Premium productivity view" badge="Live">
+    <AppShell
+      title="GrowJob Feed"
+      subtitle="Premium productivity view"
+      badge="Live"
+      statusText={authenticated ? (isPremium ? "Premium User" : "Free User") : "Guest"}
+    >
       <FocusHeader remaining={tokensLeft} total={weeklyCap} onUpgrade={() => void postAction("/api/stripe/create-checkout", "Premium upgraded")} />
 
       {message ? <p className="toast mt-3">{message}</p> : null}
 
+      {!authenticated ? (
+        <section className="section-card mt-3 animate-rise delay-1">
+          <p className="card-title">Sign in to apply and track weekly tokens</p>
+          <p className="soft-text mt-1">You can still browse, save, and hide jobs as a guest.</p>
+        </section>
+      ) : null}
+
       <JobsToolbar
         query={query}
         onQueryChange={setQuery}
+        locationQuery={locationQuery}
+        onLocationQueryChange={(value) => {
+          setLocationChip("");
+          setLocationQuery(value);
+        }}
+        locationChips={locationChips}
+        selectedLocationChip={locationChip}
+        onSelectLocationChip={(value) => {
+          setLocationChip(value);
+          if (value) setLocationQuery("");
+        }}
         remoteOnly={remoteOnly}
         setRemoteOnly={setRemoteOnly}
         verifiedOnly={verifiedOnly}
@@ -142,7 +182,22 @@ export function JobsFeed() {
         {!loadingFeed && displayJobs.length === 0 ? (
           <article className="section-card animate-rise delay-3">
             <p className="card-title">No jobs match the current filters</p>
-            <p className="soft-text mt-1">Try clearing filters or switching off verified/fresh chips.</p>
+            <p className="soft-text mt-1">Try clearing filters, removing location, or switching off verified/fresh chips.</p>
+            <div className="mt-2 flex gap-2">
+              <button className="action-btn" onClick={() => { setLocationChip(""); setLocationQuery(""); setVerifiedOnly(false); setFreshOnly(false); }}>
+                Clear restrictive filters
+              </button>
+              <button className="action-btn" onClick={() => setFreshOnly(false)}>
+                Widen freshness window
+              </button>
+            </div>
+          </article>
+        ) : null}
+
+        {authenticated ? (
+          <article className="section-card animate-rise delay-2">
+            <p className="card-title">Quick start</p>
+            <p className="soft-text mt-1">1) Complete profile  2) Upload resume  3) Run first match scan</p>
           </article>
         ) : null}
 
@@ -152,7 +207,8 @@ export function JobsFeed() {
               job={job}
               whyMatch={deriveMatchReason({ job, selectedCategory: category, query, salaryFloorK })}
               verification={inferredVerification(job.applyUrl, job.verificationTier)}
-              applyDisabled={tokensLeft <= 0}
+              applyDisabled={!authenticated || tokensLeft <= 0}
+              showUpgradeCta={authenticated && tokensLeft <= 0}
               onSave={() => void postAction(`/api/jobs/${job.id}/save`, "Saved")}
               onHide={() => void postAction(`/api/jobs/${job.id}/hide`, "Hidden")}
               onCheckMatch={() => (window.location.href = `/resume?jobId=${job.id}`)}

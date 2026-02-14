@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
 
   const category = searchParams.get("category") as JobCategory | null;
   const q = normalizeText(searchParams.get("q") ?? "");
+  const location = normalizeText(searchParams.get("location") ?? "");
   const salaryFloorK = Number(searchParams.get("salaryFloorK") ?? "10");
   const salaryFloorUsd = Number.isFinite(salaryFloorK) ? Math.max(10, salaryFloorK) * 1000 : 10000;
   const remoteOnly = searchParams.get("remoteOnly") === "true";
@@ -82,6 +83,11 @@ export async function GET(req: NextRequest) {
         `${job.title} ${job.company} ${job.location ?? ""} ${job.description ?? ""} ${job.matchReason}`,
       );
       return haystack.includes(q);
+    })
+    .filter((job) => {
+      if (!location) return true;
+      const haystack = normalizeText(`${job.location ?? ""} ${job.title} ${job.company}`);
+      return haystack.includes(location);
     });
 
   const sorted = sortFeed(enriched);
@@ -89,7 +95,7 @@ export async function GET(req: NextRequest) {
     await logEvent({
       eventType: "job_view",
       userId,
-      metadata: { jobsShown: sorted.length, category: category ?? null, salaryFloorK: salaryFloorK ?? 10, q },
+      metadata: { jobsShown: sorted.length, category: category ?? null, salaryFloorK: salaryFloorK ?? 10, q, location },
     });
   }
   return NextResponse.json({ jobs: sorted });

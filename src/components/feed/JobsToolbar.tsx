@@ -3,6 +3,11 @@
 type Props = {
   query: string;
   onQueryChange: (value: string) => void;
+  locationQuery: string;
+  onLocationQueryChange: (value: string) => void;
+  locationChips: string[];
+  selectedLocationChip: string;
+  onSelectLocationChip: (value: string) => void;
   remoteOnly: boolean;
   setRemoteOnly: (value: boolean) => void;
   verifiedOnly: boolean;
@@ -34,6 +39,28 @@ export function JobsToolbar(props: Props) {
           onChange={(e) => props.onQueryChange(e.target.value)}
         />
       </div>
+
+      <div className="mt-2 flex items-center gap-2">
+        <input
+          className="field"
+          placeholder="Search location (e.g. Berlin, India, US)"
+          value={props.locationQuery}
+          onChange={(e) => props.onLocationQueryChange(e.target.value)}
+        />
+      </div>
+
+      {props.locationChips.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {props.locationChips.map((chip) => (
+            <Chip
+              key={chip}
+              active={props.selectedLocationChip === chip}
+              onClick={() => props.onSelectLocationChip(props.selectedLocationChip === chip ? "" : chip)}
+              label={chip}
+            />
+          ))}
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Chip active={props.remoteOnly} onClick={() => props.setRemoteOnly(!props.remoteOnly)} label="Remote" />
