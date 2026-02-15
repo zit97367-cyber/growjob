@@ -12,6 +12,9 @@ export type FeedJob = {
   salaryMinUsd?: number | null;
   salaryMaxUsd?: number | null;
   salaryInferred?: boolean;
+  sectionLabel?: string;
+  displaySalary?: string;
+  riskLevel?: "LOW" | "MEDIUM" | "HIGH";
   applyUrl?: string;
 };
 

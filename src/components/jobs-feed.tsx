@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { ActionImpactCard } from "@/components/common/ActionImpactCard";
+import { OutcomeMeter } from "@/components/common/OutcomeMeter";
 import { ConfirmApplyModal } from "@/components/feed/ConfirmApplyModal";
 import { FeedJob, TokenState } from "@/components/feed/types";
 import { FiltersSheet } from "@/components/feed/FiltersSheet";
 import { FocusHeader } from "@/components/feed/FocusHeader";
 import { JobCard } from "@/components/feed/JobCard";
 import { JobsToolbar } from "@/components/feed/JobsToolbar";
-import { inferredVerification, isFreshWithinDays, timeAgo } from "@/lib/feedUi";
+import { inferredVerification, isFreshWithinDays, jobSectionLabel, locationRegionLabel, timeAgo, workStyleLabel } from "@/lib/feedUi";
 
 const INITIAL_PAGE_SIZE = 30;
 const SECOND_PAGE_SIZE = 30;
@@ -157,21 +159,59 @@ export function JobsFeed() {
     }
 
     const fresh = jobs.filter((job) => isFreshWithinDays(job.postedAt, 10));
+    const roleSet = new Set(roles.map((item) => item.toLowerCase()));
+    const regionSet = new Set(regions.map((item) => item.toLowerCase()));
+    const styleSet = new Set(workStyles.map((item) => item.toLowerCase()));
+
+    const preferenceScore = (job: FeedJob) => {
+      let score = 0;
+      const section = jobSectionLabel(job).toLowerCase();
+      const region = locationRegionLabel(job.location).toLowerCase();
+      const style = workStyleLabel(job).toLowerCase();
+      const verify = inferredVerification(job.applyUrl, job.verificationTier);
+      if (roleSet.size === 0 || roleSet.has(section)) score += 18;
+      if (regionSet.size === 0 || regionSet.has(region)) score += 12;
+      if (styleSet.size === 0 || styleSet.has(style)) score += 10;
+      if (verify === "SOURCE_VERIFIED") score += 10;
+      if (verify === "DOMAIN_VERIFIED") score += 5;
+      score += Math.max(0, 10 - Math.floor((Date.now() - new Date(job.postedAt).getTime()) / (1000 * 60 * 60 * 24)));
+      return score;
+    };
+
     if (viewMode === "AI_MATCHES") {
       return [...fresh].sort((a, b) => {
-        const scoreA = (a.matchReason?.length ?? 0) + (a.salaryMinUsd ?? 0) / 1000;
-        const scoreB = (b.matchReason?.length ?? 0) + (b.salaryMinUsd ?? 0) / 1000;
+        const scoreA = preferenceScore(a) + (a.matchReason?.length ?? 0) + (a.salaryMinUsd ?? 0) / 1000;
+        const scoreB = preferenceScore(b) + (b.matchReason?.length ?? 0) + (b.salaryMinUsd ?? 0) / 1000;
         return scoreB - scoreA;
       });
     }
 
     return [...fresh].sort((a, b) => {
-      const scoreA = (a.matchReason?.length ?? 0) + (a.isRemote ? 10 : 0);
-      const scoreB = (b.matchReason?.length ?? 0) + (b.isRemote ? 10 : 0);
+      const scoreA = preferenceScore(a) + (a.matchReason?.length ?? 0) + (a.isRemote ? 10 : 0);
+      const scoreB = preferenceScore(b) + (b.matchReason?.length ?? 0) + (b.isRemote ? 10 : 0);
       if (scoreB !== scoreA) return scoreB - scoreA;
       return new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime();
     });
-  }, [jobs, viewMode]);
+  }, [jobs, regions, roles, viewMode, workStyles]);
+
+  const outcomeScore = useMemo(() => {
+    let score = 22;
+    if (hasResume) score += 24;
+    if (roles.length > 0) score += 16;
+    if (regions.length > 0) score += 10;
+    if (workStyles.length > 0) score += 8;
+    if (tokensLeft > 0) score += 10;
+    if (jobsByView.length > 0) score += 10;
+    return Math.min(100, score);
+  }, [hasResume, roles.length, regions.length, workStyles.length, tokensLeft, jobsByView.length]);
+
+  const nextBestAction = useMemo(() => {
+    if (!hasResume) return "Upload your resume to unlock AI Matches.";
+    if (roles.length === 0) return "Set roles in Job Preferences for better ranking.";
+    if (regions.length === 0) return "Select at least one region to tighten discovery.";
+    if (tokensLeft <= 1) return "Upgrade to Premium to increase weekly applies.";
+    return "Run Check Match % on top 2 roles before applying.";
+  }, [hasResume, roles.length, regions.length, tokensLeft]);
 
   async function postAction(url: string, successMessage?: string) {
     const res = await fetch(url, { method: "POST" });
@@ -231,6 +271,12 @@ export function JobsFeed() {
         </div>
       </section>
 
+      <OutcomeMeter
+        score={outcomeScore}
+        subtitle="Match quality + application quality + interview likelihood"
+        nextAction={nextBestAction}
+      />
+
       {preferencesOpen ? (
         <FiltersSheet
           onClose={() => setPreferencesOpen(false)}
@@ -249,6 +295,14 @@ export function JobsFeed() {
       ) : null}
 
       <section className="jobs-results-panel mt-3 space-y-3">
+        <ActionImpactCard
+          title="Apply with confidence"
+          body="Safer links and better-ranked roles help avoid wasted applications."
+          impact="+8% response quality"
+          ctaLabel="Open Job Preferences"
+          onClick={() => setPreferencesOpen(true)}
+        />
+
         {loadingFeed && jobs.length === 0 ? (
           <>
             {Array.from({ length: 3 }).map((_, index) => (
@@ -290,15 +344,42 @@ export function JobsFeed() {
         {(viewMode !== "AI_MATCHES" || hasResume) &&
           jobsByView.map((job, index) => (
             <div key={job.id} className={`delay-${(index % 4) + 1}`}>
-              <JobCard
-                job={job}
-                verification={inferredVerification(job.applyUrl, job.verificationTier)}
-                applyDisabled={!authenticated || tokensLeft <= 0}
-                showUpgradeCta={!isPremium}
-                onCheckMatch={() => (window.location.href = `/resume?jobId=${job.id}`)}
-                onApply={() => setConfirmJob(job)}
-                onUpgrade={() => (window.location.href = "/plans")}
-              />
+              {(() => {
+                const verification = inferredVerification(job.applyUrl, job.verificationTier);
+                const section = jobSectionLabel(job);
+                const region = locationRegionLabel(job.location);
+                const style = workStyleLabel(job);
+                const whyRole = `Why this role: ${section} fit + ${region} market + ${style.toLowerCase()} preference`;
+                const interviewLikelihood = Math.max(
+                  42,
+                  Math.min(
+                    96,
+                    45 +
+                      (job.matchReason?.length ?? 0) +
+                      (verification === "SOURCE_VERIFIED" ? 14 : verification === "DOMAIN_VERIFIED" ? 8 : 2),
+                  ),
+                );
+                const gapFixes = [
+                  `Add 2 ${section.toLowerCase()} keywords to resume summary.`,
+                  "Quantify one recent outcome with metrics.",
+                ];
+
+                return (
+                  <JobCard
+                    job={job}
+                    verification={verification}
+                    whyRole={whyRole}
+                    mode={viewMode}
+                    interviewLikelihood={interviewLikelihood}
+                    gapFixes={gapFixes}
+                    applyDisabled={!authenticated || tokensLeft <= 0}
+                    showUpgradeCta={!isPremium}
+                    onCheckMatch={() => (window.location.href = `/resume?jobId=${job.id}`)}
+                    onApply={() => setConfirmJob(job)}
+                    onUpgrade={() => (window.location.href = "/plans")}
+                  />
+                );
+              })()}
             </div>
           ))}
 

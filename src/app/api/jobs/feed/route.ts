@@ -6,6 +6,7 @@ import { logEvent } from "@/lib/events";
 import { computeMatch, sortFeed } from "@/lib/matching";
 import { prisma } from "@/lib/prisma";
 import { normalizeText } from "@/lib/jobFilters";
+import { salaryLabel } from "@/lib/salary";
 
 function toBoundedInt(value: string | null, fallback: number, min: number, max: number) {
   if (value == null || value.trim() === "") return fallback;
@@ -43,6 +44,23 @@ function inferWorkStyle(job: { isRemote: boolean; location: string | null }) {
   if (/\bhybrid\b/.test(value)) return "hybrid";
   if (/\bonsite\b|\bon-site\b|\bin office\b/.test(value)) return "on-site";
   return "on-site";
+}
+
+function sectionLabelForCategory(category: JobCategory | null) {
+  if (!category) return "Other";
+  if (
+    category === JobCategory.AI ||
+    category === JobCategory.BACKEND ||
+    category === JobCategory.FRONT_END ||
+    category === JobCategory.CRYPTO
+  ) {
+    return "Engineering";
+  }
+  if (category === JobCategory.MARKETING) return "Marketing";
+  if (category === JobCategory.DESIGN) return "Design";
+  if (category === JobCategory.DATA_SCIENCE) return "Data";
+  if (category === JobCategory.NON_TECH) return "Operations";
+  return "Other";
 }
 
 function hasValidApplyUrl(applyUrl: string) {
@@ -156,6 +174,17 @@ export async function GET(req: NextRequest) {
             : job.verificationTier === VerificationTier.DOMAIN_VERIFIED
               ? 2
               : 1,
+        sectionLabel: sectionLabelForCategory(job.jobCategory),
+        displaySalary:
+          job.salaryMinUsd || job.salaryMaxUsd
+            ? salaryLabel(job.salaryMinUsd, job.salaryMaxUsd, Boolean(job.salaryInferred))
+            : "Competitive Salary",
+        riskLevel:
+          job.verificationTier === VerificationTier.SOURCE_VERIFIED
+            ? "LOW"
+            : job.verificationTier === VerificationTier.DOMAIN_VERIFIED
+              ? "MEDIUM"
+              : "HIGH",
       };
     })
     .filter((job) => {

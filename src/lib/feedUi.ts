@@ -1,4 +1,5 @@
 export type VerificationStatus = "SOURCE_VERIFIED" | "DOMAIN_VERIFIED" | "UNVERIFIED";
+export type RiskLevel = "LOW" | "MEDIUM" | "HIGH";
 
 const ATS_DOMAINS = ["greenhouse.io", "lever.co", "ashbyhq.com", "smartrecruiters.com"];
 
@@ -106,4 +107,37 @@ export function jobSectionLabel(job: {
   if (/data|analytics|scientist/.test(haystack)) return "Data";
   if (/engineer|developer|blockchain|solidity|backend|frontend/.test(haystack)) return "Engineering";
   return "Other";
+}
+
+export function locationRegionLabel(location?: string | null) {
+  const value = (location ?? "").trim().toLowerCase();
+  if (!value) return "Global";
+  if (/\b(us|usa|united states|new york|san francisco|austin|chicago|seattle)\b/.test(value)) return "US";
+  if (/\b(europe|eu|uk|germany|france|spain|italy|netherlands|portugal|poland)\b/.test(value)) return "Europe";
+  if (/\b(apac|asia|india|singapore|japan|korea|australia|new zealand)\b/.test(value)) return "APAC";
+  if (/\b(middle east|uae|dubai|abu dhabi|saudi|qatar|bahrain|oman)\b/.test(value)) return "Middle East";
+  if (/\b(africa|nigeria|kenya|south africa|egypt|morocco)\b/.test(value)) return "Africa";
+  return "Global";
+}
+
+export function workStyleLabel(job: { isRemote?: boolean; location?: string | null }) {
+  if (job.isRemote) return "Remote";
+  const value = (job.location ?? "").trim().toLowerCase();
+  if (/\bhybrid\b/.test(value)) return "Hybrid";
+  return "On-site";
+}
+
+export function inferRiskLevel(params: {
+  verification: VerificationStatus;
+  postedAt: string | Date;
+  applyUrl?: string;
+}): RiskLevel {
+  let riskScore = 0;
+  if (params.verification === "UNVERIFIED") riskScore += 2;
+  if (daysAgo(params.postedAt) > 10) riskScore += 1;
+  if (!params.applyUrl) riskScore += 2;
+
+  if (riskScore >= 3) return "HIGH";
+  if (riskScore >= 1) return "MEDIUM";
+  return "LOW";
 }

@@ -273,6 +273,76 @@ a {
   font-weight: 600;
 }
 
+.outcome-meter {
+  border: 1px solid rgba(43, 109, 92, 0.16);
+}
+
+.outcome-score {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #114437;
+  line-height: 1;
+}
+
+.confidence-track {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: #e4efea;
+  overflow: hidden;
+}
+
+.confidence-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #109773 0%, #0d5f4b 100%);
+  transition: width 280ms ease;
+}
+
+.next-action {
+  font-size: 0.74rem;
+  color: #2a5a4f;
+}
+
+.action-impact-card {
+  border-style: dashed;
+  border-color: rgba(31, 92, 76, 0.24);
+}
+
+.impact-chip {
+  border-radius: 999px;
+  border: 1px solid rgba(18, 89, 72, 0.2);
+  background: #e9f9f2;
+  color: #1a5d4b;
+  font-size: 0.64rem;
+  font-weight: 800;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+.status-pill {
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 4px 8px;
+}
+
+.status-pill.missing {
+  background: #fdecec;
+  color: #974545;
+}
+
+.status-pill.partial {
+  background: #fff5e8;
+  color: #966b2f;
+}
+
+.status-pill.complete {
+  background: #eaf9f2;
+  color: #1f6d59;
+}
+
 .card-title {
   margin: 0;
   color: #163b33;
@@ -403,6 +473,36 @@ a {
 .why-match {
   font-size: 0.72rem;
   color: #315f54;
+}
+
+.why-role {
+  font-size: 0.72rem;
+  color: #325d54;
+}
+
+.ai-match-box {
+  border-radius: 12px;
+  border: 1px solid rgba(22, 89, 72, 0.2);
+  background: #eef7f3;
+  padding: 8px 10px;
+}
+
+.risk-banner {
+  margin-top: 8px;
+  border-radius: 10px;
+  padding: 7px 9px;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.risk-banner.medium {
+  background: #fff6e8;
+  color: #8b6228;
+}
+
+.risk-banner.high {
+  background: #ffecec;
+  color: #944848;
 }
 
 .job-card:hover {
