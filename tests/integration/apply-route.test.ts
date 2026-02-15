@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 const getAuthSession = vi.fn();
 const trySpendApplyToken = vi.fn();
+const refundApplyToken = vi.fn();
 const logEvent = vi.fn();
 
 const prisma = {
@@ -11,13 +12,19 @@ const prisma = {
 };
 
 vi.mock("@/lib/auth", () => ({ getAuthSession }));
-vi.mock("@/lib/applyTokens", () => ({ trySpendApplyToken }));
+vi.mock("@/lib/applyTokens", () => ({ trySpendApplyToken, refundApplyToken }));
 vi.mock("@/lib/events", () => ({ logEvent }));
 vi.mock("@/lib/prisma", () => ({ prisma }));
 
 describe("POST /api/jobs/[jobId]/apply", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        status: 200,
+      }),
+    );
   });
 
   it("returns 401 for anonymous user", async () => {

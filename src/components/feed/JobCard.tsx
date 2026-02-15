@@ -2,75 +2,49 @@
 
 import { FeedJob } from "@/components/feed/types";
 import { VerifiedBadge } from "@/components/feed/VerifiedBadge";
-import { VerificationStatus, daysAgo, timeAgo } from "@/lib/feedUi";
+import { VerificationStatus, jobSectionLabel } from "@/lib/feedUi";
 import { salaryLabel } from "@/lib/salary";
 
 type Props = {
   job: FeedJob;
-  whyMatch: string;
   verification: VerificationStatus;
   applyDisabled: boolean;
   showUpgradeCta: boolean;
-  onSave: () => void;
-  onHide: () => void;
   onCheckMatch: () => void;
   onApply: () => void;
   onUpgrade: () => void;
 };
 
-function postedTone(days: number) {
-  if (days <= 1) return "fresh";
-  if (days <= 4) return "warm";
-  return "aged";
-}
-
-export function JobCard({ job, whyMatch, verification, applyDisabled, showUpgradeCta, onSave, onHide, onCheckMatch, onApply, onUpgrade }: Props) {
-  const ageDays = daysAgo(job.postedAt);
-  let sourceHost = "Source unknown";
-  try {
-    sourceHost = new URL(job.applyUrl ?? "").hostname.replace(/^www\./, "");
-  } catch {
-    sourceHost = "Source unknown";
-  }
+export function JobCard({ job, verification, applyDisabled, showUpgradeCta, onCheckMatch, onApply, onUpgrade }: Props) {
+  const salaryText =
+    job.salaryMinUsd || job.salaryMaxUsd
+      ? salaryLabel(job.salaryMinUsd, job.salaryMaxUsd, Boolean(job.salaryInferred))
+      : "Competitive Salary";
 
   return (
     <article className="job-card-premium animate-rise">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h2 className="job-title">{job.title}</h2>
-          <p className="job-meta">
-            {job.company} · {job.location || "Global"} {job.isRemote ? "· Remote" : ""}
-          </p>
-        </div>
+      <h2 className="job-title">{job.title}</h2>
+      <p className="job-meta mt-1">{job.company}</p>
+
+      <div className="mt-3 space-y-2 text-sm text-[#335950]">
+        <p><span className="font-semibold text-[#213f37]">Salary:</span> {salaryText}</p>
+        <p><span className="font-semibold text-[#213f37]">Location:</span> {job.location || "Remote / Global"}</p>
+        <p><span className="font-semibold text-[#213f37]">Section:</span> {jobSectionLabel(job)}</p>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button className="action-btn" onClick={onCheckMatch}>Check Match %</button>
         <VerifiedBadge status={verification} />
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-2">
-        <span className={`posted-chip ${postedTone(ageDays)}`}>{timeAgo(job.postedAt)}</span>
-        {job.jobCategory ? <span className="badge-muted">{job.jobCategory.replace("_", " ")}</span> : null}
-        <span className="badge-muted">{salaryLabel(job.salaryMinUsd, job.salaryMaxUsd, Boolean(job.salaryInferred))}</span>
-      </div>
-
-      <p className="why-match mt-2">Why this matches you: {whyMatch}</p>
-      <div className="mt-2 flex items-center gap-2 text-[0.62rem] text-[#5f7e76]">
-        <span className="badge-muted">Source: {sourceHost}</span>
-        <span title="Verification is derived from ATS source or apply-url/company domain match.">
-          Verification details
-        </span>
-      </div>
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button className="action-btn" onClick={onSave}>Save</button>
-        <button className="action-btn" onClick={onHide}>Hide</button>
-        <button className="action-btn" onClick={onCheckMatch}>Check Match %</button>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <button className={`action-btn primary apply-btn ${applyDisabled ? "locked" : ""}`} onClick={onApply} disabled={applyDisabled}>
-          {applyDisabled ? "🔒 Apply" : "Apply (-1 token)"}
+          {applyDisabled ? "Apply Locked" : "Apply"}
         </button>
+        {applyDisabled && showUpgradeCta ? (
+          <button className="upgrade-inline" onClick={onUpgrade}>Upgrade to Premium</button>
+        ) : null}
       </div>
-
-      {applyDisabled && showUpgradeCta ? (
-        <button className="upgrade-inline mt-2" onClick={onUpgrade}>Upgrade for 20/week</button>
-      ) : null}
     </article>
   );
 }

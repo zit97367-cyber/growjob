@@ -213,28 +213,64 @@ a {
   box-shadow: 0 11px 26px rgba(12, 35, 30, 0.08);
 }
 
-.view-switch {
+.jobs-hero-card {
+  border-radius: 20px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(57, 165, 134, 0.35), transparent 40%),
+    linear-gradient(180deg, #0f3e45 0%, #0b2035 100%);
+  border: 1px solid rgba(176, 229, 213, 0.2);
+}
+
+.jobs-search {
+  background: rgba(22, 62, 102, 0.44);
+  border-color: rgba(163, 208, 228, 0.32);
+  color: #e6f4fb;
+}
+
+.jobs-search::placeholder {
+  color: rgba(214, 233, 246, 0.78);
+}
+
+.jobs-toolbar-card {
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(174, 226, 212, 0.2);
+  padding: 12px;
+}
+
+.jobs-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.view-pill {
-  border-radius: 999px;
-  border: 1px solid rgba(19, 77, 63, 0.2);
-  background: #f5faf8;
-  color: #2c5a4e;
-  font-size: 0.67rem;
+.tab-pill {
+  border-radius: 12px;
+  border: 1px solid rgba(200, 228, 241, 0.32);
+  background: rgba(24, 58, 92, 0.5);
+  color: #c6ddeb;
+  font-size: 0.78rem;
   font-weight: 700;
-  padding: 8px 10px;
-  transition: all 180ms ease;
+  padding: 9px 10px;
 }
 
-.view-pill.active {
-  background: #0f4337;
-  color: #f1fff8;
-  border-color: #0b5a48;
-  box-shadow: 0 8px 18px rgba(8, 47, 38, 0.2);
+.tab-pill.active {
+  background: #f6fafc;
+  color: #203a46;
+}
+
+.jobs-results-panel {
+  border-radius: 22px;
+  background: #e9edf2;
+  border: 1px solid rgba(162, 185, 198, 0.45);
+  padding: 12px;
+}
+
+.results-meta {
+  color: #d8ecf7;
+  font-size: 0.68rem;
+  font-weight: 600;
 }
 
 .card-title {
@@ -312,8 +348,8 @@ a {
 
 .job-card-premium {
   border-radius: 16px;
-  border: 1px solid rgba(20, 67, 57, 0.14);
-  background: linear-gradient(180deg, #ffffff 0%, #f3f9f6 100%);
+  border: 1px solid rgba(98, 132, 154, 0.2);
+  background: #ffffff;
   padding: 14px;
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }

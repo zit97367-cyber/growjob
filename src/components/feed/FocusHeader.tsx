@@ -5,10 +5,11 @@ import { TokenRing } from "@/components/feed/TokenRing";
 type Props = {
   remaining: number;
   total: number;
-  onUpgrade: () => void;
+  onUpgrade?: () => void;
+  isPremium?: boolean;
 };
 
-export function FocusHeader({ remaining, total, onUpgrade }: Props) {
+export function FocusHeader({ remaining, total, onUpgrade, isPremium }: Props) {
   return (
     <section className="focus-header sticky top-0 z-20 animate-rise">
       <div>
@@ -17,9 +18,13 @@ export function FocusHeader({ remaining, total, onUpgrade }: Props) {
       </div>
       <div className="focus-actions">
         <TokenRing remaining={remaining} total={total} />
-        <button className="action-btn" onClick={onUpgrade}>
-          Upgrade
-        </button>
+        {isPremium ? (
+          <span className="ghost-chip">Premium</span>
+        ) : (
+          <button className="action-btn" onClick={onUpgrade}>
+            Upgrade to Premium
+          </button>
+        )}
       </div>
     </section>
   );

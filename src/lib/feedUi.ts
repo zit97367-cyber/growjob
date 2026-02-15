@@ -83,3 +83,27 @@ export function deriveMatchReason(params: {
 
   return reasons.slice(0, 2).join(" + ");
 }
+
+export function jobSectionLabel(job: {
+  jobCategory?: string | null;
+  title?: string;
+  description?: string;
+  matchReason?: string;
+}) {
+  const category = (job.jobCategory ?? "").toUpperCase();
+  if (category === "AI" || category === "BACKEND" || category === "FRONT_END" || category === "CRYPTO") return "Engineering";
+  if (category === "MARKETING") return "Marketing";
+  if (category === "DESIGN") return "Design";
+  if (category === "DATA_SCIENCE") return "Data";
+  if (category === "NON_TECH") return "Operations";
+
+  const haystack = `${job.title ?? ""} ${job.description ?? ""} ${job.matchReason ?? ""}`.toLowerCase();
+  if (/design|ux|ui/.test(haystack)) return "Design";
+  if (/marketing|growth|social|content|community/.test(haystack)) return "Marketing";
+  if (/sales|account/.test(haystack)) return "Sales";
+  if (/product/.test(haystack)) return "Product";
+  if (/operation|support|people|recruit/.test(haystack)) return "Operations";
+  if (/data|analytics|scientist/.test(haystack)) return "Data";
+  if (/engineer|developer|blockchain|solidity|backend|frontend/.test(haystack)) return "Engineering";
+  return "Other";
+}

@@ -95,6 +95,26 @@ export async function trySpendApplyToken(userId: string, isPremium: boolean) {
   });
 }
 
+export async function refundApplyToken(userId: string) {
+  return prisma.$transaction(async (tx) => {
+    const weekStartUtc = getUtcWeekStart();
+    const quota = await tx.applyQuotaWeek.findUnique({
+      where: { userId_weekStartUtc: { userId, weekStartUtc } },
+    });
+
+    if (!quota || quota.usedTokens <= 0) {
+      return { ok: false as const, refunded: false };
+    }
+
+    await tx.applyQuotaWeek.update({
+      where: { id: quota.id },
+      data: { usedTokens: { decrement: 1 } },
+    });
+
+    return { ok: true as const, refunded: true };
+  });
+}
+
 export async function redeemCreditsForBonusToken(userId: string) {
   return prisma.$transaction(async (tx) => {
     const weekStartUtc = getUtcWeekStart();

@@ -20,7 +20,12 @@ const tabs = [
 
 export function AppShell({ title, subtitle, badge, statusText, children }: Props) {
   const pathname = usePathname();
-  const activePath = pathname === "/" ? "/" : tabs.find((tab) => pathname.startsWith(tab.href))?.href;
+  const activePath = (() => {
+    if (pathname === "/") return "/";
+    const nonRoot = tabs.filter((tab) => tab.href !== "/");
+    const match = nonRoot.find((tab) => pathname === tab.href || pathname.startsWith(`${tab.href}/`));
+    return match?.href ?? "/";
+  })();
 
   return (
     <div className="phone-shell">
