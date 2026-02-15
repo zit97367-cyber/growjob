@@ -122,6 +122,15 @@ GrowJob also ships with a filesystem-cached aggregation pipeline that does not u
   - Greenhouse Board API
   - Lever Postings API
   - Remotive API (with source attribution kept as `sourceName` and `sourceUrl`)
+  - Additional Web3 sources (RSS-first with safe HTML fallback):
+    - CryptoJobsList
+    - Web3.career
+    - Solana Jobs
+    - Plexus
+    - Crypto.jobs
+    - CryptocurrencyJobs
+    - Base Ecosystem Jobs (Hirechain)
+    - Superteam Talent
 - Cache file:
   - primary: `/Users/zitkin/Downloads/CODEX project/growjob/data/cache/jobs_cache.json`
   - fallback on serverless: `/tmp/growjob_jobs_cache.json`

@@ -12,14 +12,15 @@ type Props = {
 };
 
 const tabs = [
-  { href: "/", label: "Feed" },
   { href: "/profile", label: "Profile" },
-  { href: "/resume", label: "ATS" },
-  { href: "/admin/companies", label: "Admin" },
+  { href: "/", label: "Jobs" },
+  { href: "/growth", label: "Growth" },
+  { href: "/alerts", label: "Alerts" },
 ];
 
 export function AppShell({ title, subtitle, badge, statusText, children }: Props) {
   const pathname = usePathname();
+  const activePath = pathname === "/" ? "/" : tabs.find((tab) => pathname.startsWith(tab.href))?.href;
 
   return (
     <div className="phone-shell">
@@ -40,7 +41,7 @@ export function AppShell({ title, subtitle, badge, statusText, children }: Props
 
       <nav className="bottom-nav">
         {tabs.map((tab) => {
-          const active = pathname === tab.href;
+          const active = activePath === tab.href;
           return (
             <Link key={tab.href} href={tab.href} className={`nav-item ${active ? "active" : ""}`}>
               {tab.label}

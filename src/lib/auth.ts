@@ -5,12 +5,59 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import EmailProvider from "next-auth/providers/email";
 import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
+import { consumeRateLimit, resetRateLimit } from "@/lib/rateLimit";
 import { isAdminEmail } from "@/lib/security";
+import { verifyPassword } from "@/lib/password";
 
 const providers = [];
-let usingCredentialsFallback = false;
+let externalProviderCount = 0;
+
+providers.push(
+  CredentialsProvider({
+    name: "Email & Password",
+    credentials: {
+      email: { label: "Email", type: "email" },
+      password: { label: "Password", type: "password" },
+    },
+    async authorize(credentials) {
+      const email = credentials?.email?.toLowerCase().trim();
+      const password = credentials?.password ?? "";
+
+      if (!email || !password) return null;
+
+      const bucket = consumeRateLimit(`login:${email}`, 8, 10 * 60 * 1000);
+      if (!bucket.allowed) return null;
+
+      const user = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true, email: true, name: true, image: true, role: true, isPremium: true, passwordHash: true },
+      });
+
+      if (!user?.passwordHash) return null;
+
+      let valid = false;
+      try {
+        valid = await verifyPassword(password, user.passwordHash);
+      } catch {
+        return null;
+      }
+      if (!valid) return null;
+
+      resetRateLimit(`login:${email}`);
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        image: user.image,
+        role: user.role,
+        isPremium: user.isPremium,
+      };
+    },
+  }),
+);
 
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  externalProviderCount += 1;
   providers.push(
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
@@ -20,6 +67,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 }
 
 if (process.env.EMAIL_SERVER && process.env.EMAIL_FROM) {
+  externalProviderCount += 1;
   providers.push(
     EmailProvider({
       server: process.env.EMAIL_SERVER,
@@ -28,31 +76,7 @@ if (process.env.EMAIL_SERVER && process.env.EMAIL_FROM) {
   );
 }
 
-if (providers.length === 0) {
-  usingCredentialsFallback = true;
-  providers.push(
-    CredentialsProvider({
-      name: "Demo Login",
-      credentials: {
-        email: { label: "Email", type: "email" },
-      },
-      async authorize(credentials) {
-        const email = credentials?.email?.toLowerCase().trim();
-        if (!email) return null;
-        const user = await prisma.user.upsert({
-          where: { email },
-          update: {},
-          create: {
-            email,
-            name: email.split("@")[0],
-            role: isAdminEmail(email) ? UserRole.ADMIN : UserRole.USER,
-          },
-        });
-        return user;
-      },
-    }),
-  );
-}
+const usingCredentialsFallback = externalProviderCount === 0;
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),

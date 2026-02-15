@@ -1,4 +1,5 @@
 import { GreenhouseDirectoryCompany, UnifiedJob } from "@/lib/ingest/types";
+import { fetchJsonSafe } from "@/lib/ingest/sources/http";
 
 type GreenhouseResponse = {
   jobs?: Array<{
@@ -20,31 +21,26 @@ export async function fetchGreenhouseJobs(companies: GreenhouseDirectoryCompany[
       if (!token) return;
 
       const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(token)}/jobs?content=true`;
-      try {
-        const res = await fetch(url, { cache: "no-store" });
-        if (!res.ok) return;
-        const payload = (await res.json()) as GreenhouseResponse;
+      const payload = await fetchJsonSafe<GreenhouseResponse>(url);
+      if (!payload) return;
 
-        for (const item of payload.jobs ?? []) {
-          const applyUrl = item.absolute_url ?? "";
-          if (!applyUrl) continue;
+      for (const item of payload.jobs ?? []) {
+        const applyUrl = item.absolute_url ?? "";
+        if (!applyUrl) continue;
 
-          jobs.push({
-            id: `gh-${token}-${item.id}`,
-            title: item.title,
-            company: company.name,
-            location: item.location?.name ?? null,
-            remote: /remote/i.test(`${item.title} ${item.location?.name ?? ""}`),
-            description: item.content ?? null,
-            applyUrl,
-            postedAt: item.updated_at ? new Date(item.updated_at).toISOString() : null,
-            firstSeenAt: new Date().toISOString(),
-            source: "GREENHOUSE",
-            websiteDomain: company.websiteDomain,
-          });
-        }
-      } catch {
-        return;
+        jobs.push({
+          id: `gh-${token}-${item.id}`,
+          title: item.title,
+          company: company.name,
+          location: item.location?.name ?? null,
+          remote: /remote/i.test(`${item.title} ${item.location?.name ?? ""}`),
+          description: item.content ?? null,
+          applyUrl,
+          postedAt: item.updated_at ? new Date(item.updated_at).toISOString() : null,
+          firstSeenAt: new Date().toISOString(),
+          source: "GREENHOUSE",
+          websiteDomain: company.websiteDomain,
+        });
       }
     }),
   );

@@ -15,6 +15,7 @@ export async function GET() {
       },
       creditsBalance: 0,
       authenticated: false,
+      user: null,
     });
   }
 
@@ -30,5 +31,10 @@ export async function GET() {
     creditsBalance,
     authenticated: true,
     isPremium: session.user.isPremium,
+    user: {
+      email: session.user.email ?? null,
+      role: session.user.role,
+      isPremium: session.user.isPremium,
+    },
   });
 }

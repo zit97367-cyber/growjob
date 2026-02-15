@@ -20,6 +20,12 @@ type Identity = {
   designation?: string;
 };
 
+type AccountState = {
+  email?: string | null;
+  role?: "USER" | "ADMIN";
+  isPremium?: boolean;
+};
+
 const roleOptions = [
   "Solidity Developer",
   "Backend Engineer",
@@ -159,6 +165,7 @@ export default function ProfilePage() {
   const [message, setMessage] = useState("");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [account, setAccount] = useState<AccountState>({});
 
   useEffect(() => {
     Promise.resolve().then(async () => {
@@ -169,6 +176,7 @@ export default function ProfilePage() {
         profile: Profile | null;
         creditsBalance?: number;
         identity?: Identity;
+        account?: AccountState;
       };
 
       if (data.identity) {
@@ -184,6 +192,9 @@ export default function ProfilePage() {
 
       if (typeof data.creditsBalance === "number") {
         setCreditsBalance(data.creditsBalance);
+      }
+      if (data.account) {
+        setAccount(data.account);
       }
 
       if (data.profile) {
@@ -233,6 +244,9 @@ export default function ProfilePage() {
     if (typeof data.creditsBalance === "number") {
       setCreditsBalance(data.creditsBalance);
     }
+    if (data.account) {
+      setAccount(data.account as AccountState);
+    }
 
     setMessage("Profile updated.");
   }
@@ -259,6 +273,16 @@ export default function ProfilePage() {
 
   return (
     <AppShell title="Profile" subtitle="Premium identity dashboard" badge="Profile">
+      <section className="section-card animate-rise mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="soft-text">Signed in as {identity.email ?? account.email ?? "Guest"}</p>
+          <div className="flex flex-wrap gap-2">
+            <span className="ghost-chip">{account.isPremium ? "PREMIUM" : "FREE"}</span>
+            <span className="ghost-chip">{account.role ?? "USER"}</span>
+          </div>
+        </div>
+      </section>
+
       <section className="section-card animate-rise">
         <div className="flex items-start gap-3">
           {identity.image ? (

@@ -1,4 +1,15 @@
-export type JobSource = "GREENHOUSE" | "LEVER" | "REMOTIVE";
+export type JobSource =
+  | "GREENHOUSE"
+  | "LEVER"
+  | "REMOTIVE"
+  | "CRYPTOJOBSLIST"
+  | "WEB3_CAREER"
+  | "SOLANA_JOBS"
+  | "PLEXUS"
+  | "CRYPTO_DOT_JOBS"
+  | "CRYPTOCURRENCYJOBS"
+  | "BASE_HIRECHAIN"
+  | "SUPERTEAM";
 
 export type UnifiedJob = {
   id: string;

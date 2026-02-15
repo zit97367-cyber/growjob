@@ -50,6 +50,11 @@ export async function GET() {
       phoneNumber: user?.phoneNumber ?? "",
       designation: profile?.designation ?? "",
     },
+    account: {
+      email: user?.email ?? session.user.email ?? null,
+      role: session.user.role,
+      isPremium: session.user.isPremium,
+    },
   });
 }
 
@@ -153,6 +158,11 @@ export async function PUT(req: NextRequest) {
       email: session.user.email,
       phoneNumber: trimmedPhone,
       designation: profile.designation ?? "",
+    },
+    account: {
+      email: session.user.email ?? null,
+      role: session.user.role,
+      isPremium: session.user.isPremium,
     },
   });
 }

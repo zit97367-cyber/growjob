@@ -5,7 +5,9 @@ type MatchResult = {
   reason: string;
 };
 
-export function computeMatch(profile: UserProfile | null, job: Job): MatchResult {
+type MatchableJob = Pick<Job, "title" | "description" | "isRemote" | "verificationTier">;
+
+export function computeMatch(profile: UserProfile | null, job: MatchableJob): MatchResult {
   if (!profile) {
     return { score: 10, reason: "Complete your profile for personalized matching" };
   }

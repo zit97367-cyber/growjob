@@ -1,4 +1,5 @@
 import { LeverDirectoryCompany, UnifiedJob } from "@/lib/ingest/types";
+import { fetchJsonSafe } from "@/lib/ingest/sources/http";
 
 type LeverPosting = {
   id?: string;
@@ -20,31 +21,26 @@ export async function fetchLeverJobs(companies: LeverDirectoryCompany[]): Promis
       if (!slug) return;
 
       const url = `https://api.lever.co/v0/postings/${encodeURIComponent(slug)}?mode=json`;
-      try {
-        const res = await fetch(url, { cache: "no-store" });
-        if (!res.ok) return;
-        const payload = (await res.json()) as LeverPosting[];
+      const payload = await fetchJsonSafe<LeverPosting[]>(url);
+      if (!payload) return;
 
-        for (const item of payload ?? []) {
-          const applyUrl = item.hostedUrl ?? "";
-          if (!applyUrl) continue;
+      for (const item of payload ?? []) {
+        const applyUrl = item.hostedUrl ?? "";
+        if (!applyUrl) continue;
 
-          jobs.push({
-            id: `lever-${slug}-${item.id ?? applyUrl}`,
-            title: item.text ?? "",
-            company: company.name,
-            location: item.categories?.location ?? null,
-            remote: /remote/i.test(`${item.text ?? ""} ${item.categories?.location ?? ""}`),
-            description: item.descriptionPlain ?? null,
-            applyUrl,
-            postedAt: item.createdAt ? new Date(item.createdAt).toISOString() : null,
-            firstSeenAt: new Date().toISOString(),
-            source: "LEVER",
-            websiteDomain: company.websiteDomain,
-          });
-        }
-      } catch {
-        return;
+        jobs.push({
+          id: `lever-${slug}-${item.id ?? applyUrl}`,
+          title: item.text ?? "",
+          company: company.name,
+          location: item.categories?.location ?? null,
+          remote: /remote/i.test(`${item.text ?? ""} ${item.categories?.location ?? ""}`),
+          description: item.descriptionPlain ?? null,
+          applyUrl,
+          postedAt: item.createdAt ? new Date(item.createdAt).toISOString() : null,
+          firstSeenAt: new Date().toISOString(),
+          source: "LEVER",
+          websiteDomain: company.websiteDomain,
+        });
       }
     }),
   );

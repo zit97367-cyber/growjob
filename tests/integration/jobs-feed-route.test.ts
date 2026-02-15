@@ -41,7 +41,7 @@ describe("GET /api/jobs/feed", () => {
   it("passes category/salary/query filters into DB query", async () => {
     const { GET } = await import("@/app/api/jobs/feed/route");
     const req = new NextRequest(
-      "http://localhost/api/jobs/feed?category=MARKETING&salaryFloorK=110&q=marketing&remoteOnly=true",
+      "http://localhost/api/jobs/feed?category=MARKETING&salaryFloorK=110&q=marketing&remoteOnly=true&limit=5&offset=3",
     );
 
     const res = await GET(req);
@@ -72,6 +72,27 @@ describe("GET /api/jobs/feed", () => {
         salaryMaxUsd: 150000,
       }),
     );
+    expect(body.meta).toEqual(
+      expect.objectContaining({
+        limit: 30,
+        offset: 0,
+        source: "PERSONALIZED",
+        totalApprox: 1,
+      }),
+    );
     expect(logEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not fail response when event logging rejects", async () => {
+    getAuthSession.mockResolvedValue({ user: { id: "u1" } });
+    logEvent.mockRejectedValue(new Error("telemetry down"));
+    const { GET } = await import("@/app/api/jobs/feed/route");
+    const req = new NextRequest("http://localhost/api/jobs/feed?limit=10&offset=0");
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.jobs).toHaveLength(1);
+    expect(body.meta.limit).toBe(10);
   });
 });
