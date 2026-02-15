@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 const getAuthSession = vi.fn();
 const logEvent = vi.fn();
+const getJobsCacheOrRefresh = vi.fn();
 const prisma = {
   job: { findMany: vi.fn() },
   userProfile: { findUnique: vi.fn() },
@@ -11,6 +12,7 @@ const prisma = {
 
 vi.mock("@/lib/auth", () => ({ getAuthSession }));
 vi.mock("@/lib/events", () => ({ logEvent }));
+vi.mock("@/lib/ingest/index", () => ({ getJobsCacheOrRefresh }));
 vi.mock("@/lib/prisma", () => ({ prisma }));
 
 describe("GET /api/jobs/feed", () => {
@@ -36,6 +38,10 @@ describe("GET /api/jobs/feed", () => {
         company: { name: "LayerX" },
       },
     ]);
+    getJobsCacheOrRefresh.mockResolvedValue({
+      generatedAt: "2026-02-15T00:00:00Z",
+      jobs: [],
+    });
   });
 
   it("passes category/salary/query filters into DB query", async () => {
@@ -94,5 +100,43 @@ describe("GET /api/jobs/feed", () => {
     expect(res.status).toBe(200);
     expect(body.jobs).toHaveLength(1);
     expect(body.meta.limit).toBe(10);
+  });
+
+  it("falls back to cache when DB fails", async () => {
+    prisma.job.findMany.mockRejectedValue(new Error("db unavailable"));
+    getJobsCacheOrRefresh.mockResolvedValue({
+      generatedAt: "2026-02-15T00:00:00Z",
+      jobs: [
+        {
+          id: "fallback-1",
+          title: "Community Manager",
+          company: "OpenChain",
+          location: "Remote, Europe",
+          remote: true,
+          description: "community growth web3",
+          applyUrl: "https://jobs.lever.co/openchain/1",
+          postedAt: "2026-02-14T10:00:00Z",
+          firstSeenAt: "2026-02-14T10:00:00Z",
+          source: "LEVER",
+          websiteDomain: "openchain.xyz",
+        },
+      ],
+    });
+
+    const { GET } = await import("@/app/api/jobs/feed/route");
+    const req = new NextRequest("http://localhost/api/jobs/feed?regions=europe&workStyles=remote&limit=10&offset=0");
+    const res = await GET(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.meta.source).toBe("FALLBACK");
+    expect(body.jobs).toHaveLength(1);
+    expect(body.jobs[0]).toEqual(
+      expect.objectContaining({
+        id: "fallback-1",
+        sectionLabel: "Community",
+        verificationTier: "SOURCE_VERIFIED",
+      }),
+    );
   });
 });

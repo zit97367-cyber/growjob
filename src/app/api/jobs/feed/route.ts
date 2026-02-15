@@ -3,10 +3,12 @@ import { subDays } from "date-fns";
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthSession } from "@/lib/auth";
 import { logEvent } from "@/lib/events";
+import { getJobsCacheOrRefresh } from "@/lib/ingest/index";
 import { computeMatch, sortFeed } from "@/lib/matching";
 import { prisma } from "@/lib/prisma";
 import { normalizeText } from "@/lib/jobFilters";
 import { salaryLabel } from "@/lib/salary";
+import { computeVerificationTier } from "@/lib/verify";
 
 function toBoundedInt(value: string | null, fallback: number, min: number, max: number) {
   if (value == null || value.trim() === "") return fallback;
@@ -72,6 +74,18 @@ function hasValidApplyUrl(applyUrl: string) {
   }
 }
 
+function sectionLabelFromText(text: string) {
+  const value = normalizeText(text);
+  if (/\b(community|moderator|support|operations|ops)\b/.test(value)) return "Community";
+  if (/\b(engineer|developer|backend|frontend|full stack|solidity|smart contract|devops|platform|infra)\b/.test(value)) return "Engineering";
+  if (/\b(marketing|growth|content|social|brand|seo)\b/.test(value)) return "Marketing";
+  if (/\b(design|ux|ui|product designer|visual)\b/.test(value)) return "Design";
+  if (/\b(data|analyst|science|ml|ai|analytics|bi)\b/.test(value)) return "Data";
+  if (/\b(product|project manager|pm)\b/.test(value)) return "Product";
+  if (/\b(sales|account executive|business development)\b/.test(value)) return "Sales";
+  return "Other";
+}
+
 export async function GET(req: NextRequest) {
   const startedAt = Date.now();
   const session = await getAuthSession();
@@ -99,161 +113,249 @@ export async function GET(req: NextRequest) {
   const limit = toBoundedInt(searchParams.get("limit"), 30, 1, 60);
   const offset = toBoundedInt(searchParams.get("offset"), 0, 0, 500);
 
-  const dbStartedAt = Date.now();
-  const [jobs, profile, hiddenIds] = await Promise.all([
-    prisma.job.findMany({
-      where: {
-        AND: [
-          { OR: [{ publishedAt: { gte: subDays(new Date(), 7) } }, { firstSeenAt: { gte: subDays(new Date(), 7) } }] },
-          {
-            OR: [
-              { salaryMinUsd: { gte: salaryFloorUsd } },
-              { salaryMaxUsd: { gte: salaryFloorUsd } },
-              { salaryMinUsd: null },
-            ],
-          },
-        ],
-        ...(category && Object.values(JobCategory).includes(category) ? { jobCategory: category } : {}),
-        ...(remoteOnly ? { isRemote: true } : {}),
-      },
-      select: {
-        id: true,
-        title: true,
-        location: true,
-        isRemote: true,
-        description: true,
-        applyUrl: true,
-        publishedAt: true,
-        firstSeenAt: true,
-        verificationTier: true,
-        sourceReliability: true,
-        salaryMinUsd: true,
-        salaryMaxUsd: true,
-        salaryInferred: true,
-        jobCategory: true,
-        company: { select: { name: true } },
-      },
-      orderBy: [{ publishedAt: "desc" }, { firstSeenAt: "desc" }],
-      take: 200,
-    }),
-    userId ? prisma.userProfile.findUnique({ where: { userId } }) : Promise.resolve(null),
-    userId
-      ? prisma.userJobAction.findMany({ where: { userId, actionType: "HIDE" }, select: { jobId: true } })
-      : Promise.resolve([]),
-  ]);
-  const dbElapsedMs = Date.now() - dbStartedAt;
+  let dbElapsedMs = 0;
+  try {
+    const dbStartedAt = Date.now();
+    const [jobs, profile, hiddenIds] = await Promise.all([
+      prisma.job.findMany({
+        where: {
+          AND: [
+            { OR: [{ publishedAt: { gte: subDays(new Date(), 7) } }, { firstSeenAt: { gte: subDays(new Date(), 7) } }] },
+            {
+              OR: [
+                { salaryMinUsd: { gte: salaryFloorUsd } },
+                { salaryMaxUsd: { gte: salaryFloorUsd } },
+                { salaryMinUsd: null },
+              ],
+            },
+          ],
+          ...(category && Object.values(JobCategory).includes(category) ? { jobCategory: category } : {}),
+          ...(remoteOnly ? { isRemote: true } : {}),
+        },
+        select: {
+          id: true,
+          title: true,
+          location: true,
+          isRemote: true,
+          description: true,
+          applyUrl: true,
+          publishedAt: true,
+          firstSeenAt: true,
+          verificationTier: true,
+          sourceReliability: true,
+          salaryMinUsd: true,
+          salaryMaxUsd: true,
+          salaryInferred: true,
+          jobCategory: true,
+          company: { select: { name: true } },
+        },
+        orderBy: [{ publishedAt: "desc" }, { firstSeenAt: "desc" }],
+        take: 200,
+      }),
+      userId ? prisma.userProfile.findUnique({ where: { userId } }) : Promise.resolve(null),
+      userId
+        ? prisma.userJobAction.findMany({ where: { userId, actionType: "HIDE" }, select: { jobId: true } })
+        : Promise.resolve([]),
+    ]);
+    dbElapsedMs = Date.now() - dbStartedAt;
 
-  const hidden = new Set((hiddenIds ?? []).map((item) => item.jobId));
+    const hidden = new Set((hiddenIds ?? []).map((item) => item.jobId));
 
-  const enrichStartedAt = Date.now();
-  const enriched = jobs
-    .filter((job) => hasValidApplyUrl(job.applyUrl))
-    .filter((job) => !hidden.has(job.id))
-    .map((job) => {
-      const match = computeMatch(profile, job);
-      return {
-        id: job.id,
-        title: job.title,
-        company: job.company.name,
-        location: job.location,
-        isRemote: job.isRemote,
-        postedAt: job.publishedAt ?? job.firstSeenAt,
-        applyUrl: job.applyUrl,
-        matchScore: match.score,
-        matchReason: match.reason,
-        salaryMinUsd: job.salaryMinUsd,
-        salaryMaxUsd: job.salaryMaxUsd,
-        salaryInferred: job.salaryInferred,
-        verificationTier: job.verificationTier,
-        sourceReliability: job.sourceReliability,
-        jobCategory: job.jobCategory,
-        freshnessRank: Math.floor((new Date(job.publishedAt ?? job.firstSeenAt).getTime() - subDays(new Date(), 10).getTime()) / (1000 * 60 * 60)),
-        verificationRank:
-          job.verificationTier === VerificationTier.SOURCE_VERIFIED
-            ? 3
-            : job.verificationTier === VerificationTier.DOMAIN_VERIFIED
-              ? 2
-              : 1,
-        sectionLabel: sectionLabelForCategory(job.jobCategory),
-        displaySalary:
-          job.salaryMinUsd || job.salaryMaxUsd
-            ? salaryLabel(job.salaryMinUsd, job.salaryMaxUsd, Boolean(job.salaryInferred))
-            : "Competitive Salary",
-        riskLevel:
-          job.verificationTier === VerificationTier.SOURCE_VERIFIED
-            ? "LOW"
-            : job.verificationTier === VerificationTier.DOMAIN_VERIFIED
-              ? "MEDIUM"
-              : "HIGH",
-      };
-    })
-    .filter((job) => {
-      if (!q) return true;
-      const haystack = normalizeText(`${job.title} ${job.company} ${job.location ?? ""} ${job.matchReason}`);
-      return haystack.includes(q);
-    })
-    .filter((job) => {
-      if (!location) return true;
-      const haystack = normalizeText(`${job.location ?? ""} ${job.title} ${job.company}`);
-      return haystack.includes(location);
-    })
-    .filter((job) => {
-      if (roles.length === 0) return true;
-      const mappedCategories = roles.flatMap((role) => ROLE_CATEGORY_MAP[role] ?? []);
-      const byCategory = mappedCategories.length > 0 && job.jobCategory ? mappedCategories.includes(job.jobCategory) : false;
-      const haystack = normalizeText(`${job.title} ${job.matchReason}`);
-      const byKeyword = roles.some((role) => haystack.includes(role));
-      return byCategory || byKeyword;
-    })
-    .filter((job) => {
-      if (regions.length === 0) return true;
-      const region = detectRegion(job.location);
-      return region ? regions.includes(region) : false;
-    })
-    .filter((job) => {
-      if (workStyles.length === 0) return true;
-      const style = inferWorkStyle(job);
-      return workStyles.includes(style);
-    });
+    const enrichStartedAt = Date.now();
+    const enriched = jobs
+      .filter((job) => hasValidApplyUrl(job.applyUrl))
+      .filter((job) => !hidden.has(job.id))
+      .map((job) => {
+        const match = computeMatch(profile, job);
+        return {
+          id: job.id,
+          title: job.title,
+          company: job.company.name,
+          location: job.location,
+          isRemote: job.isRemote,
+          postedAt: job.publishedAt ?? job.firstSeenAt,
+          applyUrl: job.applyUrl,
+          matchScore: match.score,
+          matchReason: match.reason,
+          salaryMinUsd: job.salaryMinUsd,
+          salaryMaxUsd: job.salaryMaxUsd,
+          salaryInferred: job.salaryInferred,
+          verificationTier: job.verificationTier,
+          sourceReliability: job.sourceReliability,
+          jobCategory: job.jobCategory,
+          freshnessRank: Math.floor((new Date(job.publishedAt ?? job.firstSeenAt).getTime() - subDays(new Date(), 10).getTime()) / (1000 * 60 * 60)),
+          verificationRank:
+            job.verificationTier === VerificationTier.SOURCE_VERIFIED
+              ? 3
+              : job.verificationTier === VerificationTier.DOMAIN_VERIFIED
+                ? 2
+                : 1,
+          sectionLabel: sectionLabelForCategory(job.jobCategory),
+          displaySalary:
+            job.salaryMinUsd || job.salaryMaxUsd
+              ? salaryLabel(job.salaryMinUsd, job.salaryMaxUsd, Boolean(job.salaryInferred))
+              : "Competitive Salary",
+          riskLevel:
+            job.verificationTier === VerificationTier.SOURCE_VERIFIED
+              ? "LOW"
+              : job.verificationTier === VerificationTier.DOMAIN_VERIFIED
+                ? "MEDIUM"
+                : "HIGH",
+        };
+      })
+      .filter((job) => {
+        if (!q) return true;
+        const haystack = normalizeText(`${job.title} ${job.company} ${job.location ?? ""} ${job.matchReason}`);
+        return haystack.includes(q);
+      })
+      .filter((job) => {
+        if (!location) return true;
+        const haystack = normalizeText(`${job.location ?? ""} ${job.title} ${job.company}`);
+        return haystack.includes(location);
+      })
+      .filter((job) => {
+        if (roles.length === 0) return true;
+        const mappedCategories = roles.flatMap((role) => ROLE_CATEGORY_MAP[role] ?? []);
+        const byCategory = mappedCategories.length > 0 && job.jobCategory ? mappedCategories.includes(job.jobCategory) : false;
+        const haystack = normalizeText(`${job.title} ${job.matchReason}`);
+        const byKeyword = roles.some((role) => haystack.includes(role));
+        return byCategory || byKeyword;
+      })
+      .filter((job) => {
+        if (regions.length === 0) return true;
+        const region = detectRegion(job.location);
+        return region ? regions.includes(region) : false;
+      })
+      .filter((job) => {
+        if (workStyles.length === 0) return true;
+        const style = inferWorkStyle(job);
+        return workStyles.includes(style);
+      });
 
-  const sorted = sortFeed(enriched).slice(offset, offset + limit);
-  const enrichElapsedMs = Date.now() - enrichStartedAt;
-  const totalElapsedMs = Date.now() - startedAt;
-  if (userId) {
-    void logEvent({
-      eventType: "job_view",
-      userId,
-      metadata: {
-        jobsShown: sorted.length,
-        category: category ?? null,
-        salaryFloorK: salaryFloorK ?? 10,
-        q,
-        location,
-        roles,
-        regions,
-        workStyles,
+    const sorted = sortFeed(enriched).slice(offset, offset + limit);
+    const enrichElapsedMs = Date.now() - enrichStartedAt;
+    const totalElapsedMs = Date.now() - startedAt;
+    if (userId) {
+      void logEvent({
+        eventType: "job_view",
+        userId,
+        metadata: {
+          jobsShown: sorted.length,
+          category: category ?? null,
+          salaryFloorK: salaryFloorK ?? 10,
+          q,
+          location,
+          roles,
+          regions,
+          workStyles,
+          limit,
+          offset,
+        },
+      }).catch(() => {
+        // Keep feed path resilient even if analytics logging fails.
+      });
+    }
+
+    const response = {
+      jobs: sorted,
+      meta: {
         limit,
         offset,
+        totalApprox: enriched.length,
+        source: "PERSONALIZED" as const,
+        timingsMs: {
+          db: dbElapsedMs,
+          enrichSort: enrichElapsedMs,
+          total: totalElapsedMs,
+        },
       },
-    }).catch(() => {
-      // Keep feed path resilient even if analytics logging fails.
+    };
+
+    return NextResponse.json(response);
+  } catch {
+    // DB is unavailable or slow; serve cached ingestion jobs so feed stays usable.
+    const fallbackStartedAt = Date.now();
+    const cache = await getJobsCacheOrRefresh();
+    const cutoff = subDays(new Date(), 10).getTime();
+    const fallback = cache.jobs
+      .filter((job) => hasValidApplyUrl(job.applyUrl))
+      .filter((job) => {
+        const ts = new Date(job.postedAt ?? job.firstSeenAt).getTime();
+        return Number.isFinite(ts) && ts >= cutoff;
+      })
+      .map((job) => {
+        const verificationTier = computeVerificationTier(job);
+        const combinedText = `${job.title} ${job.description ?? ""}`;
+        const sectionLabel = sectionLabelFromText(combinedText);
+        return {
+          id: job.id,
+          title: job.title,
+          company: job.company,
+          location: job.location,
+          isRemote: Boolean(job.remote),
+          postedAt: job.postedAt ?? job.firstSeenAt,
+          applyUrl: job.applyUrl,
+          matchScore: 0,
+          matchReason: "Fresh role from verified public job feeds.",
+          salaryMinUsd: null,
+          salaryMaxUsd: null,
+          salaryInferred: false,
+          verificationTier,
+          sourceReliability: verificationTier === VerificationTier.SOURCE_VERIFIED ? 90 : verificationTier === VerificationTier.DOMAIN_VERIFIED ? 70 : 50,
+          jobCategory: null,
+          freshnessRank: Math.floor((new Date(job.postedAt ?? job.firstSeenAt).getTime() - subDays(new Date(), 10).getTime()) / (1000 * 60 * 60)),
+          verificationRank:
+            verificationTier === VerificationTier.SOURCE_VERIFIED ? 3 : verificationTier === VerificationTier.DOMAIN_VERIFIED ? 2 : 1,
+          sectionLabel,
+          displaySalary: "Competitive Salary",
+          riskLevel: verificationTier === VerificationTier.SOURCE_VERIFIED ? "LOW" : verificationTier === VerificationTier.DOMAIN_VERIFIED ? "MEDIUM" : "HIGH",
+        };
+      })
+      .filter((job) => !remoteOnly || job.isRemote)
+      .filter((job) => {
+        if (!q) return true;
+        const haystack = normalizeText(`${job.title} ${job.company} ${job.location ?? ""} ${job.matchReason}`);
+        return haystack.includes(q);
+      })
+      .filter((job) => {
+        if (!location) return true;
+        const haystack = normalizeText(`${job.location ?? ""} ${job.title} ${job.company}`);
+        return haystack.includes(location);
+      })
+      .filter((job) => {
+        if (roles.length === 0) return true;
+        const haystack = normalizeText(`${job.title} ${job.matchReason} ${job.sectionLabel}`);
+        return roles.some((role) => haystack.includes(role));
+      })
+      .filter((job) => {
+        if (regions.length === 0) return true;
+        const region = detectRegion(job.location);
+        return region ? regions.includes(region) : false;
+      })
+      .filter((job) => {
+        if (workStyles.length === 0) return true;
+        const style = inferWorkStyle(job);
+        return workStyles.includes(style);
+      })
+      .sort((a, b) => {
+        if (b.verificationRank !== a.verificationRank) return b.verificationRank - a.verificationRank;
+        return new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime();
+      });
+
+    const sliced = fallback.slice(offset, offset + limit);
+    return NextResponse.json({
+      jobs: sliced,
+      meta: {
+        limit,
+        offset,
+        totalApprox: fallback.length,
+        source: "FALLBACK" as const,
+        timingsMs: {
+          db: dbElapsedMs,
+          enrichSort: Date.now() - fallbackStartedAt,
+          total: Date.now() - startedAt,
+        },
+      },
     });
   }
-
-  const response = {
-    jobs: sorted,
-    meta: {
-      limit,
-      offset,
-      totalApprox: enriched.length,
-      source: "PERSONALIZED" as const,
-      timingsMs: {
-        db: dbElapsedMs,
-        enrichSort: enrichElapsedMs,
-        total: totalElapsedMs,
-      },
-    },
-  };
-
-  return NextResponse.json(response);
 }
