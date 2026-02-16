@@ -42,7 +42,7 @@ export default function SignInPage() {
           email: email.trim().toLowerCase(),
           password,
           redirect: false,
-          callbackUrl: "/",
+          callbackUrl: "/jobs",
         }),
       );
 
@@ -51,7 +51,7 @@ export default function SignInPage() {
         return;
       }
 
-      window.location.href = result.url ?? "/";
+      window.location.href = result.url ?? "/jobs";
     } catch (err) {
       const msg = err instanceof Error && err.message === "timeout"
         ? "Login is taking longer than expected. Try again."
@@ -86,14 +86,14 @@ export default function SignInPage() {
           email: email.trim().toLowerCase(),
           password,
           redirect: false,
-          callbackUrl: "/",
+          callbackUrl: "/jobs",
         }),
       );
       if (!result?.ok) {
         setError("Account created. Please sign in.");
         return;
       }
-      window.location.href = result.url ?? "/";
+      window.location.href = result.url ?? "/jobs";
     } catch (err) {
       const msg = err instanceof Error && err.message === "timeout"
         ? "Login is taking longer than expected. Try again."

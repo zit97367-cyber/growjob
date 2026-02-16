@@ -13,7 +13,7 @@ type Props = {
 
 const tabs = [
   { href: "/profile", label: "Profile" },
-  { href: "/", label: "Jobs" },
+  { href: "/jobs", label: "Jobs" },
   { href: "/growth", label: "Growth" },
   { href: "/alerts", label: "Alerts" },
 ];
@@ -21,10 +21,8 @@ const tabs = [
 export function AppShell({ title, subtitle, badge, statusText, children }: Props) {
   const pathname = usePathname();
   const activePath = (() => {
-    if (pathname === "/") return "/";
-    const nonRoot = tabs.filter((tab) => tab.href !== "/");
-    const match = nonRoot.find((tab) => pathname === tab.href || pathname.startsWith(`${tab.href}/`));
-    return match?.href ?? "/";
+    const match = tabs.find((tab) => pathname === tab.href || pathname.startsWith(`${tab.href}/`));
+    return match?.href ?? "/jobs";
   })();
 
   return (

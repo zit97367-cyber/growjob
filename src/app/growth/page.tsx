@@ -96,7 +96,7 @@ export default function GrowthPage() {
           body="Fix 2 role-specific resume gaps and improve interview likelihood this week."
           impact="+12%"
           ctaLabel="Open AI Matches"
-          onClick={() => (window.location.href = "/")}
+          onClick={() => (window.location.href = "/jobs")}
         />
         <ActionImpactCard
           title="Profile Completion Momentum"

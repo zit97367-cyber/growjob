@@ -23,7 +23,7 @@ export default function PlansPage() {
               return;
             }
             if (data?.ok && data?.upgraded) {
-              window.location.href = "/";
+              window.location.href = "/jobs";
             }
           }}
         >
